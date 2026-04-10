@@ -16,25 +16,21 @@ export default function Profile() {
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
   useEffect(() => {
-    // 延迟加载数据，确保页面切换动画流畅
-    const timer = setTimeout(() => {
+    let cancelled = false;
+    requestAnimationFrame(() => {
+      if (cancelled) return;
       const diaries = storage.getDiaries();
       const cat = storage.getActiveCat();
       setActiveCat(cat);
-      
-      // Calculate days since registration (mocked for now or based on first diary)
+
       const firstDiary = diaries[diaries.length - 1];
-      const days = firstDiary 
+      const days = firstDiary
         ? Math.max(1, Math.ceil((Date.now() - new Date(firstDiary.createdAt).getTime()) / (1000 * 60 * 60 * 24)))
         : 1;
 
-      setStats({
-        days,
-        entries: diaries.length
-      });
-    }, 300);
-
-    return () => clearTimeout(timer);
+      setStats({ days, entries: diaries.length });
+    });
+    return () => { cancelled = true; };
   }, []);
 
   const handleLogout = () => {

@@ -1,0 +1,11 @@
+===================================================================
+Step 3: P0-4 修复 CatPlayer 视频源兼容性
+文件: src/pages/CatPlayer.tsx
+问题: longPress 改为 petting 后旧数据无 petting 字段导致播放失败
+===================================================================
+
+--- a/src/pages/CatPlayer.tsx
++++ b/src/pages/CatPlayer.tsx
+@@ -236,1 +236,1 @@
+-          src={cat.videoPaths?.petting || cat.videoPath}
++          src={cat.videoPaths?.petting || cat.videoPaths?.longPress || cat.videoPath}

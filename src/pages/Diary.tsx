@@ -70,15 +70,16 @@ export default function Diary() {
   }, [commentingId]);
 
   useEffect(() => {
-    // 延迟加载数据，确保页面切换动画流畅
-    const timer = setTimeout(() => {
+    // 使用 rAF 延迟一帧加载数据，让动画先完成而不造成明显空白
+    let cancelled = false;
+    requestAnimationFrame(() => {
+      if (cancelled) return;
       mockFriendService.initializeMockData();
       setDiaries(storage.getDiaries());
       setFriendDiaries(storage.getFriendDiaries());
       setCatList(storage.getCatList());
-    }, 300);
-    
-    return () => clearTimeout(timer);
+    });
+    return () => { cancelled = true; };
   }, []);
 
   const handlePost = async () => {

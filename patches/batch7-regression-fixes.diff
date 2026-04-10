@@ -1,0 +1,355 @@
+diff --git a/src/App.tsx b/src/App.tsx
+index 86c013b..c256b98 100644
+--- a/src/App.tsx
++++ b/src/App.tsx
+@@ -13,8 +13,7 @@ const Register = lazy(() => import("./pages/Register"));
+ const TermsOfService = lazy(() => import("./pages/TermsOfService"));
+ const ResetPassword = lazy(() => import("./pages/ResetPassword"));
+ const Welcome = lazy(() => import("./pages/Welcome"));
+-const Points = lazy(() => import("./pages/Points"));
+-const Profile = lazy(() => import("./pages/Profile"));
++// Points 和 Profile 由 MainLayout 持久化渲染，无需在路由层 lazy 加载
+ const EditProfile = lazy(() => import("./pages/EditProfile"));
+ const ChangePassword = lazy(() => import("./pages/ChangePassword"));
+ const PrivacySettings = lazy(() => import("./pages/PrivacySettings"));
+@@ -114,8 +113,8 @@ function AppRoutes() {
+           <Route path="/diary" element={hasCat ? <></> : <Navigate to="/empty-cat" replace />} />
+           <Route path="/time-letters" element={hasCat ? <></> : <Navigate to="/empty-cat" replace />} />
+           <Route path="/notifications" element={hasCat ? <></> : <Navigate to="/empty-cat" replace />} />
+-          <Route path="/points" element={hasCat ? <Points /> : <Navigate to="/empty-cat" replace />} />
+-          <Route path="/profile" element={<Profile />} />
++          <Route path="/points" element={hasCat ? <></> : <Navigate to="/empty-cat" replace />} />
++          <Route path="/profile" element={hasCat ? <></> : <Navigate to="/empty-cat" replace />} />
+         </Route>
+   
+         {/* Settings & Detail Routes (No Bottom Nav) */}
+diff --git a/src/components/ErrorBoundary.tsx b/src/components/ErrorBoundary.tsx
+index 6efea4d..316e82f 100644
+--- a/src/components/ErrorBoundary.tsx
++++ b/src/components/ErrorBoundary.tsx
+@@ -28,12 +28,13 @@ class ErrorBoundary extends React.Component<Props, State> {
+   }
+ 
+   private handleReset = () => {
++    // 先尝试就地恢复，不刷新页面
+     this.setState({ hasError: false, error: null });
+-    window.location.href = "/";
+   };
+ 
+-  private handleReload = () => {
+-    window.location.reload();
++  private handleGoHome = () => {
++    this.setState({ hasError: false, error: null });
++    window.location.href = "/";
+   };
+ 
+   public render() {
+@@ -61,15 +62,15 @@ class ErrorBoundary extends React.Component<Props, State> {
+ 
+             <div className="flex flex-col gap-3">
+               <button
+-                onClick={this.handleReload}
++                onClick={this.handleReset}
+                 className="w-full py-4 bg-[#FF9D76] text-white rounded-2xl font-bold shadow-lg shadow-orange-200 flex items-center justify-center gap-2 active:scale-95 transition-transform"
+               >
+                 <RefreshCw size={20} />
+                 重试一下
+               </button>
+-              
++
+               <button
+-                onClick={this.handleReset}
++                onClick={this.handleGoHome}
+                 className="w-full py-4 bg-gray-50 text-gray-600 rounded-2xl font-bold flex items-center justify-center gap-2 active:scale-95 transition-transform"
+               >
+                 <Home size={20} />
+diff --git a/src/components/layout/MainLayout.tsx b/src/components/layout/MainLayout.tsx
+index cfc9c59..5853465 100644
+--- a/src/components/layout/MainLayout.tsx
++++ b/src/components/layout/MainLayout.tsx
+@@ -46,8 +46,7 @@ export default function MainLayout() {
+         initial={false}
+         animate={{ 
+           opacity: isActive ? 1 : 0,
+-          zIndex: isActive ? 10 : -10,
+-          scale: isActive ? 1 : 0.98
++          zIndex: isActive ? 10 : 0
+         }}
+         transition={{ duration: 0.2, ease: "easeOut" }}
+         className={`fixed inset-0 ${isActive ? '' : 'pointer-events-none'}`}
+@@ -75,8 +74,7 @@ export default function MainLayout() {
+         initial={false}
+         animate={{ 
+           opacity: isHome ? 1 : 0,
+-          zIndex: isHome ? 0 : -10,
+-          scale: isHome ? 1 : 0.98
++          zIndex: isHome ? 0 : 0
+         }}
+         transition={{ duration: 0.2, ease: "easeOut" }}
+         className={`fixed inset-0 ${isHome ? '' : 'pointer-events-none'}`}
+diff --git a/src/index.css b/src/index.css
+index 602856b..1bb0e77 100644
+--- a/src/index.css
++++ b/src/index.css
+@@ -45,14 +45,15 @@
+     right: 0;
+     bottom: 0;
+ 
+-    /* 彻底禁用长按选词功能 */
+-    -webkit-user-select: none; /* Safari/iOS */
+-    -moz-user-select: none;    /* Firefox */
+-    -ms-user-select: none;     /* IE10+/Edge */
+-    user-select: none;         /* Standard */
+-    -webkit-touch-callout: none; /* iOS Safari 禁用长按弹出菜单 */
++    /* 禁用 iOS 长按弹出菜单，但保留文本可选性 */
++    -webkit-touch-callout: none;
+   }
+-  input, textarea {
++  /* 仅在按钮和交互元素上禁用选中，保留文本内容可选 */
++  button, a, [role="button"] {
++    -webkit-user-select: none;
++    user-select: none;
++  }
++  input, textarea, select {
+     -webkit-user-select: auto;
+     user-select: auto;
+   }
+diff --git a/src/pages/CatPlayer.tsx b/src/pages/CatPlayer.tsx
+index cc5ad5c..3a3c596 100644
+--- a/src/pages/CatPlayer.tsx
++++ b/src/pages/CatPlayer.tsx
+@@ -233,7 +233,7 @@ export default function CatPlayer() {
+ 
+         <video 
+           ref={videoRef}
+-          src={cat.videoPaths?.petting || cat.videoPath}
++          src={cat.videoPaths?.petting || cat.videoPaths?.longPress || cat.videoPath}
+           autoPlay
+           loop
+           muted
+diff --git a/src/pages/Diary.tsx b/src/pages/Diary.tsx
+index ea3c6f2..6d04322 100644
+--- a/src/pages/Diary.tsx
++++ b/src/pages/Diary.tsx
+@@ -70,15 +70,16 @@ export default function Diary() {
+   }, [commentingId]);
+ 
+   useEffect(() => {
+-    // 延迟加载数据，确保页面切换动画流畅
+-    const timer = setTimeout(() => {
++    // 使用 rAF 延迟一帧加载数据，让动画先完成而不造成明显空白
++    let cancelled = false;
++    requestAnimationFrame(() => {
++      if (cancelled) return;
+       mockFriendService.initializeMockData();
+       setDiaries(storage.getDiaries());
+       setFriendDiaries(storage.getFriendDiaries());
+       setCatList(storage.getCatList());
+-    }, 300);
+-    
+-    return () => clearTimeout(timer);
++    });
++    return () => { cancelled = true; };
+   }, []);
+ 
+   const handlePost = async () => {
+diff --git a/src/pages/Home.tsx b/src/pages/Home.tsx
+index 64f9ad6..3a4c538 100644
+--- a/src/pages/Home.tsx
++++ b/src/pages/Home.tsx
+@@ -90,21 +90,17 @@ export default function Home() {
+   };
+ 
+   useEffect(() => {
+-    // 延迟执行重度逻辑，确保 UI 先渲染
+-    const timer = setTimeout(() => {
+-      const refreshCat = () => {
+-        const info = storage.getActiveCat();
+-        setCat(info);
+-        if (info) {
+-          setVideoAspectRatio(null);
+-        }
+-      };
+-
+-      refreshCat();
++    // 同步初始化猫咪数据，避免首屏空白
++    const info = storage.getActiveCat();
++    setCat(info);
++    if (info) setVideoAspectRatio(null);
+ 
++    // 延迟执行积分等重度逻辑，确保 UI 先渲染
++    let intervalId: ReturnType<typeof setInterval> | null = null;
++    const timer = setTimeout(() => {
+       const pointsInfo = storage.getPoints();
+       const today = new Date().toISOString().slice(0, 10);
+-      
++
+       if (pointsInfo.lastLoginDate !== today) {
+         pointsInfo.total += 10;
+         pointsInfo.history.unshift({
+@@ -116,8 +112,8 @@ export default function Home() {
+         });
+         if (pointsInfo.history.length > 50) pointsInfo.history.pop();
+         pointsInfo.lastLoginDate = today;
+-        pointsInfo.onlineMinutes = 0; // Reset daily online minutes
+-        pointsInfo.lastOnlineUpdate = Date.now(); // Reset the timer start
++        pointsInfo.onlineMinutes = 0;
++        pointsInfo.lastOnlineUpdate = Date.now();
+         storage.savePoints(pointsInfo);
+         setPoints(pointsInfo.total);
+         triggerPointToast("+10 每日登录奖励");
+@@ -127,11 +123,10 @@ export default function Home() {
+ 
+       showGreetingOnce();
+ 
+-      onlineTimerRef.current = setInterval(() => {
++      intervalId = setInterval(() => {
+         const p = storage.getPoints();
+         const now = Date.now();
+-        
+-        // If the last update was more than 5 minutes ago, assume they were offline and don't count that gap
++
+         if (now - p.lastOnlineUpdate > 5 * 60000) {
+           p.lastOnlineUpdate = now;
+           storage.savePoints(p);
+@@ -139,12 +134,11 @@ export default function Home() {
+         }
+ 
+         const diffMinutes = Math.floor((now - p.lastOnlineUpdate) / 60000);
+-        
++
+         if (diffMinutes >= 1) {
+           p.onlineMinutes += diffMinutes;
+           p.lastOnlineUpdate = now;
+-          
+-          // Check if we just crossed the 10 minute threshold
++
+           if (p.onlineMinutes >= 10 && p.onlineMinutes - diffMinutes < 10) {
+             p.total += 10;
+             p.history.unshift({
+@@ -161,10 +155,12 @@ export default function Home() {
+           storage.savePoints(p);
+         }
+       }, 60000);
++      onlineTimerRef.current = intervalId;
+     }, 300);
+ 
+     return () => {
+       clearTimeout(timer);
++      if (intervalId) clearInterval(intervalId);
+       if (onlineTimerRef.current) clearInterval(onlineTimerRef.current);
+       if (bubbleTimerRef.current) clearTimeout(bubbleTimerRef.current);
+       if (secretTapTimer.current) clearTimeout(secretTapTimer.current);
+diff --git a/src/pages/Points.tsx b/src/pages/Points.tsx
+index ccdcbc3..7a0e20d 100644
+--- a/src/pages/Points.tsx
++++ b/src/pages/Points.tsx
+@@ -28,15 +28,12 @@ export default function Points() {
+       setPoints(data.total || 0);
+     };
+     
+-    // 延迟首次加载，确保页面切换动画流畅
+-    const timer = setTimeout(fetchPoints, 300);
+-    
++    // 首帧后加载数据
++    requestAnimationFrame(fetchPoints);
++
+     // Poll for updates in case Home.tsx adds points in the background
+     const interval = setInterval(fetchPoints, 2000);
+-    return () => {
+-      clearTimeout(timer);
+-      clearInterval(interval);
+-    };
++    return () => clearInterval(interval);
+   }, []);
+ 
+   const today = new Date().toISOString().slice(0, 10);
+diff --git a/src/pages/Profile.tsx b/src/pages/Profile.tsx
+index c9b7591..80d3550 100644
+--- a/src/pages/Profile.tsx
++++ b/src/pages/Profile.tsx
+@@ -16,25 +16,21 @@ export default function Profile() {
+   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+ 
+   useEffect(() => {
+-    // 延迟加载数据，确保页面切换动画流畅
+-    const timer = setTimeout(() => {
++    let cancelled = false;
++    requestAnimationFrame(() => {
++      if (cancelled) return;
+       const diaries = storage.getDiaries();
+       const cat = storage.getActiveCat();
+       setActiveCat(cat);
+-      
+-      // Calculate days since registration (mocked for now or based on first diary)
++
+       const firstDiary = diaries[diaries.length - 1];
+-      const days = firstDiary 
++      const days = firstDiary
+         ? Math.max(1, Math.ceil((Date.now() - new Date(firstDiary.createdAt).getTime()) / (1000 * 60 * 60 * 24)))
+         : 1;
+ 
+-      setStats({
+-        days,
+-        entries: diaries.length
+-      });
+-    }, 300);
+-
+-    return () => clearTimeout(timer);
++      setStats({ days, entries: diaries.length });
++    });
++    return () => { cancelled = true; };
+   }, []);
+ 
+   const handleLogout = () => {
+diff --git a/src/pages/Welcome.tsx b/src/pages/Welcome.tsx
+index f3e8de7..7add1ce 100644
+--- a/src/pages/Welcome.tsx
++++ b/src/pages/Welcome.tsx
+@@ -16,36 +16,26 @@ export default function Welcome() {
+ 
+   const [showDebugDialog, setShowDebugDialog] = useState(false);
+   const [debugClickCount, setDebugClickCount] = useState(0);
+-  const debugTimerRef = useRef<NodeJS.Timeout | null>(null);
++  const debugTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+   const [toast, setToast] = useState<string | null>(null);
+ 
+-  // 资源预加载逻辑
++  // 预加载猫咪头像资源
+   useEffect(() => {
+-    const preloadImages = () => {
+-      const catList = storage.getCatList();
+-      const imagesToPreload = [
+-        ...catList.map(cat => cat.avatar),
+-        "https://assets.mixkit.co/videos/preview/mixkit-cute-cat-lying-on-a-bed-34537-large.mp4" // 预加载视频（浏览器会处理缓存）
+-      ];
+-
+-      imagesToPreload.forEach(src => {
+-        if (!src) return;
+-        if (src.endsWith('.mp4')) {
+-          const video = document.createElement('video');
+-          video.src = src;
+-          video.preload = 'auto';
+-        } else {
++    const preloadAvatars = () => {
++      storage.getCatList().forEach(cat => {
++        if (cat.avatar) {
+           const img = new Image();
+-          img.src = src;
++          img.src = cat.avatar;
+         }
+       });
+     };
+ 
+-    // 在页面空闲时预加载
+     if ('requestIdleCallback' in window) {
+-      (window as any).requestIdleCallback(preloadImages);
++      const id = (window as unknown as { requestIdleCallback: (cb: () => void) => number }).requestIdleCallback(preloadAvatars);
++      return () => (window as unknown as { cancelIdleCallback: (id: number) => void }).cancelIdleCallback(id);
+     } else {
+-      setTimeout(preloadImages, 1000);
++      const timer = setTimeout(preloadAvatars, 1000);
++      return () => clearTimeout(timer);
+     }
+   }, []);
+ 
