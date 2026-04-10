@@ -27,6 +27,7 @@ export default function Home() {
   
   const [loadError, setLoadError] = useState(false); 
   const [showControls, setShowControls] = useState(false); 
+  
   const [videoAspectRatio, setVideoAspectRatio] = useState<number | null>(null);
   const [secretTapCount, setSecretTapCount] = useState(0);
   const secretTapTimer = useRef<NodeJS.Timeout | null>(null);
@@ -567,6 +568,16 @@ export default function Home() {
           handleSecretTap();
         }}
       />
+
+      {/* 隐藏式功能按钮 - 已根据需求彻底移除常驻入口，仅通过上方秘密手势唤起确认弹窗 */}
+      {/* 如果需要在开发模式下强制显示，可以取消下方注释 */}
+      {/* 
+      <AnimatePresence>
+        {(showControls && isDev) && (
+          <motion.div ... />
+        )}
+      </AnimatePresence> 
+      */}
 
       {/* 统一对话气泡 - 仿对话框样式与左侧滑入动画 */}
       <AnimatePresence mode="wait">
