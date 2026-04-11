@@ -5,10 +5,10 @@
 
 import React, { lazy, Suspense } from "react";
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from "react-router-dom";
-import MainLayout from "./components/layout/MainLayout";
-import Login from "./pages/Login";
 
-// 使用 React.lazy 延迟加载非核心页面
+// 使用 React.lazy 延迟加载所有页面和布局
+const MainLayout = lazy(() => import("./components/layout/MainLayout"));
+const Login = lazy(() => import("./pages/Login"));
 const Register = lazy(() => import("./pages/Register"));
 const TermsOfService = lazy(() => import("./pages/TermsOfService"));
 const ResetPassword = lazy(() => import("./pages/ResetPassword"));
@@ -31,35 +31,13 @@ const AddFriendQR = lazy(() => import("./pages/AddFriendQR"));
 const ScanFriend = lazy(() => import("./pages/ScanFriend"));
 
 import { AuthProvider, useAuthContext } from "./context/AuthContext";
-import { storage } from "./services/storage";
 
-function SplashScreen() {
-  return (
-    <div className="fixed inset-0 bg-[#FFF5F0] flex flex-col items-center justify-center z-[9999]">
-      <div className="relative">
-        {/* 简单的猫爪加载动画或 Logo */}
-        <div className="w-24 h-24 bg-white rounded-full shadow-lg flex items-center justify-center mb-4">
-          <span className="text-2xl font-black text-[#FF9D76]">Miao</span>
-        </div>
-        <div className="absolute -bottom-2 left-1/2 -translate-x-1/2">
-          <div className="flex gap-1">
-            <div className="w-2 h-2 bg-[#FF9D76] rounded-full animate-bounce [animation-delay:-0.3s]"></div>
-            <div className="w-2 h-2 bg-[#FF9D76] rounded-full animate-bounce [animation-delay:-0.15s]"></div>
-            <div className="w-2 h-2 bg-[#FF9D76] rounded-full animate-bounce"></div>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { isAuthenticated, isInitializing } = useAuthContext();
   const location = useLocation();
 
-  if (isInitializing) {
-    return <SplashScreen />;
-  }
+  if (isInitializing) return null; // AppRoutes handles SplashScreen
 
   if (!isAuthenticated) {
     return <Navigate to="/login" state={{ from: location }} replace />;
@@ -72,12 +50,10 @@ function AppRoutes() {
   const { isAuthenticated, isInitializing, hasCat } = useAuthContext();
   const location = useLocation(); // Force re-render on route change
 
-  if (isInitializing) {
-    return <SplashScreen />;
-  }
+  if (isInitializing) return null;
 
   return (
-    <Suspense fallback={<div className="min-h-screen bg-background flex items-center justify-center"><div className="w-8 h-8 border-4 border-primary border-t-transparent rounded-full animate-spin"></div></div>}>
+    <Suspense fallback={<div className="min-h-screen bg-[#FFF5F0] flex items-center justify-center"><div className="w-8 h-8 border-4 border-primary border-t-transparent rounded-full animate-spin"></div></div>}>
       <Routes location={location}>
         {/* Auth Routes */}
         <Route path="/login" element={
@@ -96,7 +72,7 @@ function AppRoutes() {
             hasCat ? <Navigate to="/" replace /> : <Navigate to="/empty-cat" replace />
           ) : <ResetPassword />
         } />
-        
+
         {/* Onboarding & Special Pages (No Bottom Nav) */}
         <Route path="/empty-cat" element={<ProtectedRoute>{!hasCat ? <EmptyCatPage /> : <Navigate to="/" replace />}</ProtectedRoute>} />
         <Route path="/welcome" element={<ProtectedRoute><Welcome /></ProtectedRoute>} />
@@ -106,7 +82,7 @@ function AppRoutes() {
         <Route path="/cat-player/:id" element={<ProtectedRoute><CatPlayer /></ProtectedRoute>} />
         <Route path="/cat-history" element={<ProtectedRoute><CatHistory /></ProtectedRoute>} />
         <Route path="/accompany-milestone" element={<ProtectedRoute><AccompanyMilestonePage /></ProtectedRoute>} />
-  
+
         {/* Main App Routes (with Bottom Nav) */}
         <Route element={<ProtectedRoute><MainLayout /></ProtectedRoute>}>
           <Route path="/" element={hasCat ? <></> : <Navigate to="/empty-cat" replace />} />
@@ -116,7 +92,7 @@ function AppRoutes() {
           <Route path="/points" element={hasCat ? <></> : <Navigate to="/empty-cat" replace />} />
           <Route path="/profile" element={hasCat ? <></> : <Navigate to="/empty-cat" replace />} />
         </Route>
-  
+
         {/* Settings & Detail Routes (No Bottom Nav) */}
         <Route path="/edit-profile" element={<ProtectedRoute><EditProfile /></ProtectedRoute>} />
         <Route path="/change-password" element={<ProtectedRoute><ChangePassword /></ProtectedRoute>} />
@@ -126,7 +102,7 @@ function AppRoutes() {
         <Route path="/switch-companion" element={<ProtectedRoute><SwitchCompanion /></ProtectedRoute>} />
         <Route path="/add-friend-qr" element={<ProtectedRoute><AddFriendQR /></ProtectedRoute>} />
         <Route path="/scan-friend" element={<ProtectedRoute><ScanFriend /></ProtectedRoute>} />
-  
+
         {/* Fallback */}
         <Route path="*" element={<Navigate to="/login" replace />} />
       </Routes>
