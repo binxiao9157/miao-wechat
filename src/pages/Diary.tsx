@@ -210,6 +210,13 @@ export default function Diary() {
     const file = e.target.files?.[0];
     if (file) {
       const type = file.type.startsWith('video') ? 'video' : 'image';
+
+      // 视频大小预检查：在读取文件前就拦截，避免浪费 IO
+      if (type === 'video' && file.size > 2 * 1024 * 1024) {
+        alert("视频文件太大啦，请选择 2MB 以内的视频哦");
+        return;
+      }
+
       const reader = new FileReader();
       reader.onloadend = () => {
         if (!isMountedRef.current) return;
@@ -239,18 +246,13 @@ export default function Diary() {
             canvas.height = height;
             const ctx = canvas.getContext('2d');
             ctx?.drawImage(img, 0, 0, width, height);
-            
+
             // 导出压缩后的 Base64 (JPEG 格式，质量 0.6)
             const compressedBase64 = canvas.toDataURL('image/jpeg', 0.6);
             setSelectedMedia({ url: compressedBase64, type: 'image' });
           };
           img.src = reader.result as string;
         } else {
-          // 视频处理：Web 端实时压缩成本较高，此处采取限制文件大小的策略
-          if (file.size > 2 * 1024 * 1024) { // 严格限制在 2MB 以内
-            alert("视频文件太大啦，请选择 2MB 以内的视频哦");
-            return;
-          }
           setSelectedMedia({ url: reader.result as string, type: 'video' });
         }
       };

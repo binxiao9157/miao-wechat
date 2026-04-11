@@ -1,0 +1,125 @@
+===================================================================
+ Step 3 - P2: Medium Priority Fixes
+ - ScanFriend file input reset + error callback
+ - CatPlayer video loading timeout
+ - GenerationProgress points deduction race condition
+ - EditProfile base64 size validation
+ - Diary video size pre-check
+===================================================================
+
+diff --git a/src/pages/ScanFriend.tsx b/src/pages/ScanFriend.tsx
+index 8b03687..071193e 100644
+--- a/src/pages/ScanFriend.tsx
++++ b/src/pages/ScanFriend.tsx
+@@ -73,7 +73,12 @@
+           if (isUnmounted) return;
+           handleScanResult(decodedText);
+         },
+-        () => {}
++        (errorMessage) => {
++          // 扫描帧级别的错误（如模糊/无码），仅在非常规错误时记录日志
++          if (errorMessage && !errorMessage.includes('No QR code found')) {
++            console.warn("QR scan frame error:", errorMessage);
++          }
++        }
+       );
+     } catch (err: any) {
+       console.error("Camera start error:", err);
+@@ -139,6 +144,9 @@
+     } catch (err) {
+       setError("未在图片中识别到二维码");
+       setTimeout(() => setError(null), 3000);
++    } finally {
++      // 重置 input，确保选择同一文件时仍能触发 onChange
++      e.target.value = '';
+     }
+   };
+
+diff --git a/src/pages/CatPlayer.tsx b/src/pages/CatPlayer.tsx
+index 2e5a868..4dd8e92 100644
+--- a/src/pages/CatPlayer.tsx
++++ b/src/pages/CatPlayer.tsx
+@@ -31,7 +31,16 @@
+       navigate("/");
+     }
+
++    // 视频加载超时保护：30 秒后若仍在 loading 则提示错误
++    const loadTimeout = setTimeout(() => {
++      setIsLoading(prev => {
++        if (prev) setErrorDetails("视频加载超时，请检查网络后重试");
++        return false;
++      });
++    }, 30000);
++
+     return () => {
++      clearTimeout(loadTimeout);
+       if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
+
+@@ -226,7 +235,7 @@
+         <div className="absolute inset-0 z-0">
+           <img
+-            src={cat.avatar || `https://picsum.photos/seed/${cat.breed}/1080/1920`}
++            src={cat.avatar || ''}
+             alt=""
+
+diff --git a/src/pages/GenerationProgress.tsx b/src/pages/GenerationProgress.tsx
+--- a/src/pages/GenerationProgress.tsx
++++ b/src/pages/GenerationProgress.tsx
+@@ -54,11 +54,12 @@
+     try {
+       setPhase('i2v');
+
+-      // 积分前置检查
++      // 积分前置扣除（先扣后生成），防止并发消费导致余额透支
+       if (isRedemption && !isDebugRedemption) {
+-        const currentPoints = storage.getPoints();
+         const required = redemptionAmount || 200;
+-        if (currentPoints.total < required) {
++        const success = storage.deductPoints(required, "解锁新伙伴");
++        if (!success) {
++          const currentPoints = storage.getPoints();
+           throw new Error(`积分不足，需要 ${required} 积分，当前仅有 ${currentPoints.total} 积分`);
+         }
+       }
+
+  [Two duplicate deductPoints blocks replaced with comments at L154 and L212]
+
+diff --git a/src/pages/EditProfile.tsx b/src/pages/EditProfile.tsx
+index 05bdae6..5a92999 100644
+--- a/src/pages/EditProfile.tsx
++++ b/src/pages/EditProfile.tsx
+@@ -61,9 +61,15 @@
+           const ctx = canvas.getContext('2d');
+           ctx?.drawImage(img, 0, 0, width, height);
+
+-          // 导出压缩后的 Base64
++          // 导出压缩后的 Base64，并校验大小
+           const compressedBase64 = canvas.toDataURL('image/jpeg', 0.7);
+-          setAvatar(compressedBase64);
++          // Base64 约为原始大小的 4/3，超过 500KB 则进一步降低质量
++          if (compressedBase64.length > 500 * 1024) {
++            const smallerBase64 = canvas.toDataURL('image/jpeg', 0.4);
++            setAvatar(smallerBase64);
++          } else {
++            setAvatar(compressedBase64);
++          }
+           setShowActionSheet(false);
+
+diff --git a/src/pages/Diary.tsx b/src/pages/Diary.tsx
+index 63cf4d7..2feda80 100644
+--- a/src/pages/Diary.tsx
++++ b/src/pages/Diary.tsx
+@@ -210,6 +210,13 @@
+     const file = e.target.files?.[0];
+     if (file) {
+       const type = file.type.startsWith('video') ? 'video' : 'image';
++
++      // 视频大小预检查：在读取文件前就拦截，避免浪费 IO
++      if (type === 'video' && file.size > 2 * 1024 * 1024) {
++        alert("视频文件太大啦，请选择 2MB 以内的视频哦");
++        return;
++      }
++
+       const reader = new FileReader();
+
+  [Original size check inside reader.onloadend removed]

@@ -150,7 +150,7 @@ if (typeof window !== 'undefined') {
 
 // structuredClone polyfill：兼容 iOS Safari < 15.4 等旧浏览器
 function safeClone<T>(value: T): T {
-  if (typeof structuredClone === 'function') return safeClone(value);
+  if (typeof structuredClone === 'function') return structuredClone(value);
   return JSON.parse(JSON.stringify(value));
 }
 

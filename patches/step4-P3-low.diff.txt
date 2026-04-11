@@ -1,0 +1,104 @@
+===================================================================
+ Step 4 - P3: Low Priority Fixes
+ - Points.tsx polling -> event-driven
+ - SwitchCompanion.tsx polling -> visibilitychange
+ - Welcome.tsx remove external CDN preload
+ - AddFriendQR.tsx null cat guard
+===================================================================
+
+diff --git a/src/pages/Points.tsx b/src/pages/Points.tsx
+index 9666587..624fe22 100644
+--- a/src/pages/Points.tsx
++++ b/src/pages/Points.tsx
+@@ -31,11 +31,18 @@
+     // 缩短延迟，平衡动画流畅度与加载速度
+     const timer = setTimeout(fetchPoints, 50);
+
+-    // Poll for updates in case Home.tsx adds points in the background
+-    const interval = setInterval(fetchPoints, 2000);
++    // 监听 storage 变化即可，无需高频轮询
++    const onStorage = (e: StorageEvent) => {
++      if (e.key && e.key.includes('points')) fetchPoints();
++    };
++    window.addEventListener('storage', onStorage);
++    // 页面可见时刷新一次，覆盖同 tab 内变更
++    const onVisible = () => { if (document.visibilityState === 'visible') fetchPoints(); };
++    document.addEventListener('visibilitychange', onVisible);
+     return () => {
+       clearTimeout(timer);
+-      clearInterval(interval);
++      window.removeEventListener('storage', onStorage);
++      document.removeEventListener('visibilitychange', onVisible);
+     };
+   }, []);
+
+diff --git a/src/pages/SwitchCompanion.tsx b/src/pages/SwitchCompanion.tsx
+index 5ad0e6d..9dad5ad 100644
+--- a/src/pages/SwitchCompanion.tsx
++++ b/src/pages/SwitchCompanion.tsx
+@@ -21,8 +21,10 @@
+     fetchData();
+
+-    const interval = setInterval(fetchData, 2000);
+-    return () => clearInterval(interval);
++    // 页面可见时刷新，替代 2s 轮询
++    const onVisible = () => { if (document.visibilityState === 'visible') fetchData(); };
++    document.addEventListener('visibilitychange', onVisible);
++    return () => document.removeEventListener('visibilitychange', onVisible);
+   }, []);
+
+diff --git a/src/pages/Welcome.tsx b/src/pages/Welcome.tsx
+index bd5db94..a3ab7fc 100644
+--- a/src/pages/Welcome.tsx
++++ b/src/pages/Welcome.tsx
+@@ -22,21 +22,15 @@
+   useEffect(() => {
+     const preloadImages = () => {
+       const catList = storage.getCatList();
++      // 仅预加载本地头像资源，移除外部 CDN 视频依赖
+       const imagesToPreload = [
+         ...catList.map(cat => cat.avatar),
+-        "https://assets.mixkit.co/videos/preview/mixkit-cute-cat-lying-on-a-bed-34537-large.mp4"
+       ];
+
+       imagesToPreload.forEach(src => {
+         if (!src) return;
+-        if (src.endsWith('.mp4')) {
+-          const video = document.createElement('video');
+-          video.src = src;
+-          video.preload = 'auto';
+-        } else {
+-          const img = new Image();
+-          img.src = src;
+-        }
++        const img = new Image();
++        img.src = src;
+       });
+     };
+
+diff --git a/src/pages/AddFriendQR.tsx b/src/pages/AddFriendQR.tsx
+index 18c8db2..8fb1fbe 100644
+--- a/src/pages/AddFriendQR.tsx
++++ b/src/pages/AddFriendQR.tsx
+@@ -22,7 +22,7 @@
+     if (location.state?.cat) return location.state.cat;
+-    return storage.getActiveCat() || storage.getCatList()[0];
++    return storage.getActiveCat() || storage.getCatList()[0] || null;
+   }, [location.state]);
+
+@@ -186,7 +186,16 @@
+     catName: cat.name,
+     timestamp: Date.now()
+-  }), [user.username, user.nickname, cat.name]);
++  }), [user.username, user.nickname, cat?.name]);
++
++  if (!cat) {
++    return (
++      <div className="flex flex-col h-screen bg-background items-center justify-center">
++        <p className="text-on-surface-variant text-sm">暂无猫咪数据，请先创建一只猫咪</p>
++        <button onClick={() => navigate("/welcome")} className="mt-4 text-primary font-bold text-sm">去创建</button>
++      </div>
++    );
++  }
+
+   return (

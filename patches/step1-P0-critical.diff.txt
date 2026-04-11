@@ -1,0 +1,30 @@
+===================================================================
+ Step 1 - P0: Critical / Blocking Fixes
+ - safeClone infinite recursion (storage.ts)
+ - GenerationProgress dead route (GenerationProgress.tsx)
+===================================================================
+
+diff --git a/src/services/storage.ts b/src/services/storage.ts
+index 2d1346a..f754887 100644
+--- a/src/services/storage.ts
++++ b/src/services/storage.ts
+@@ -150,7 +150,7 @@ if (typeof window !== 'undefined') {
+
+ // structuredClone polyfill：兼容 iOS Safari < 15.4 等旧浏览器
+ function safeClone<T>(value: T): T {
+-  if (typeof structuredClone === 'function') return safeClone(value);
++  if (typeof structuredClone === 'function') return structuredClone(value);
+   return JSON.parse(JSON.stringify(value));
+ }
+
+diff --git a/src/pages/GenerationProgress.tsx b/src/pages/GenerationProgress.tsx
+--- a/src/pages/GenerationProgress.tsx
++++ b/src/pages/GenerationProgress.tsx
+@@ -236,7 +231,7 @@
+     checkConnectivity();
+
+     if (!image && (!breed || !furColor)) {
+-      navigate("/create-cat", { replace: true });
++      navigate("/create-companion", { replace: true });
+       return;
+     }

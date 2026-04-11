@@ -54,11 +54,12 @@ export default function GenerationProgress() {
     try {
       setPhase('i2v');
 
-      // 积分前置检查
+      // 积分前置扣除（先扣后生成），防止并发消费导致余额透支
       if (isRedemption && !isDebugRedemption) {
-        const currentPoints = storage.getPoints();
         const required = redemptionAmount || 200;
-        if (currentPoints.total < required) {
+        const success = storage.deductPoints(required, "解锁新伙伴");
+        if (!success) {
+          const currentPoints = storage.getPoints();
           throw new Error(`积分不足，需要 ${required} 积分，当前仅有 ${currentPoints.total} 积分`);
         }
       }
@@ -153,10 +154,7 @@ export default function GenerationProgress() {
     // 标记为正在解锁
     await FileManager.updateCatVideos(groupId, {}, true);
 
-    // 扣除积分
-    if (isRedemption && !isDebugRedemption) {
-      storage.deductPoints(redemptionAmount || 200, "解锁新伙伴");
-    }
+    // 积分已在 startI2VPhase 开头前置扣除，此处无需重复
 
     storage.setActiveCatId(groupId);
     refreshCatStatus();
@@ -214,10 +212,7 @@ export default function GenerationProgress() {
       }
     );
 
-    // 扣除积分
-    if (isRedemption && !isDebugRedemption) {
-      storage.deductPoints(redemptionAmount || 200, "解锁新伙伴");
-    }
+    // 积分已在 startI2VPhase 开头前置扣除，此处无需重复
 
     storage.setActiveCatId(groupId);
     refreshCatStatus();
@@ -236,7 +231,7 @@ export default function GenerationProgress() {
     checkConnectivity();
 
     if (!image && (!breed || !furColor)) {
-      navigate("/create-cat", { replace: true });
+      navigate("/create-companion", { replace: true });
       return;
     }
 

@@ -1,0 +1,121 @@
+===================================================================
+ Step 2 - P1: High Priority Fixes
+ - External CDN dependencies (Login.tsx, CreateCompanion.tsx)
+ - Password security (ChangePassword.tsx, PrivacySettings.tsx)
+ - Day calculation precision (Profile.tsx)
+===================================================================
+
+diff --git a/src/pages/Login.tsx b/src/pages/Login.tsx
+index e4f6f83..d1e7166 100644
+--- a/src/pages/Login.tsx
++++ b/src/pages/Login.tsx
+@@ -16,8 +16,8 @@
+   const [isAgreed, setIsAgreed] = useState(false);
+   const [shake, setShake] = useState(false);
+
+-  // Default cat image fallback
+-  const DEFAULT_CAT_IMAGE = "https://images.unsplash.com/photo-1514888286974-6c03e2ca1dba?q=80&w=1000&auto=format&fit=crop";
++  // Default cat image fallback — 使用本地内联 SVG 占位，避免离线时依赖外部 CDN
++  const DEFAULT_CAT_IMAGE = "image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 200 200'%3E%3Crect fill='%23FEF6F0' width='200' height='200'/%3E%3Ctext x='100' y='115' text-anchor='middle' font-size='80'%3E🐱%3C/text%3E%3C/svg%3E";
+
+diff --git a/src/pages/CreateCompanion.tsx b/src/pages/CreateCompanion.tsx
+index abb7bb7..df19bdc 100644
+--- a/src/pages/CreateCompanion.tsx
++++ b/src/pages/CreateCompanion.tsx
+@@ -1,6 +1,6 @@
+ import React, { useState, useEffect, useRef } from "react";
+ import { useNavigate, useLocation } from "react-router-dom";
+-import { ArrowLeft, Check, Sparkles, AlertCircle, Coins, PartyPopper, Loader2 } from "lucide-react";
++import { ArrowLeft, Check, Sparkles, AlertCircle, Loader2 } from "lucide-react";
+ import { catService } from "../services/catService";
+ import { storage } from "../services/storage";
+ import { motion, AnimatePresence } from "motion/react";
+@@ -19,8 +19,6 @@
+   const [selectedColor, setSelectedColor] = useState<string | null>(null);
+   const [catName, setCatName] = useState("");
+   const [isGenerating, setIsGenerating] = useState(false);
+-  const [showSuccess, setShowSuccess] = useState(false);
+-  const [generationStatus, setGenerationStatus] = useState("");
+   const [showToast, setShowToast] = useState<string | null>(null);
+
+@@ -36,8 +34,10 @@
+         if (!response.ok) throw new Error("Not found");
+       } catch (e) {
+         console.warn(`Local asset not found or fetch failed: ${url}, using fallback.`);
+-        const fallbackUrl = `https://picsum.photos/seed/cat_${fallbackId}/400/400`;
+-        response = await fetch(fallbackUrl);
++        // 本地资源加载失败时使用内联 SVG 占位，避免依赖外部 CDN
++        const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 400"><rect fill="%23FEF6F0" width="400" height="400"/><text x="200" y="220" text-anchor="middle" font-size="120">🐱</text></svg>`;
++        const fallbackBlob = new Blob([svg], { type: 'image/svg+xml' });
++        return URL.createObjectURL(fallbackBlob);
+       }
+
+@@ -230,7 +230,7 @@
+             {isGenerating ? (
+               <>
+                 <Loader2 className="animate-spin" size={24} />
+-                <span>{generationStatus}</span>
++                <span>生成中...</span>
+               </>
+
+  [Dead code removed: showSuccess dialog + generationStatus button (~60 lines)]
+
+diff --git a/src/pages/ChangePassword.tsx b/src/pages/ChangePassword.tsx
+index 5600abe..3bece8d 100644
+--- a/src/pages/ChangePassword.tsx
++++ b/src/pages/ChangePassword.tsx
+@@ -2,6 +2,7 @@
+ import { useNavigate } from "react-router-dom";
+ import { ArrowLeft, Eye, EyeOff, ShieldCheck, Lock } from "lucide-react";
+ import { useAuth } from "../hooks/useAuth";
++import { storage } from "../services/storage";
+ import { motion, AnimatePresence } from "motion/react";
+
+@@ -26,7 +27,9 @@
+       setError("请填写完整信息");
+       return;
+     }
+-    if (currentPassword !== user?.password) {
++    // 通过 storage.findUser 从持久层校验密码，避免仅依赖内存中可能过期的 user 对象
++    const savedUser = user?.username ? storage.findUser(user.username) : null;
++    if (!savedUser || currentPassword !== savedUser.password) {
+       setError("当前密码错误");
+       return;
+     }
+
+diff --git a/src/pages/PrivacySettings.tsx b/src/pages/PrivacySettings.tsx
+index 9b7f974..2a3ac42 100644
+--- a/src/pages/PrivacySettings.tsx
++++ b/src/pages/PrivacySettings.tsx
+@@ -6,7 +6,18 @@
+ export default function PrivacySettings() {
+   const navigate = useNavigate();
+-  const [cacheSize, setCacheSize] = useState("124.8 MB");
++  const [cacheSize, setCacheSize] = useState(() => {
++    // 动态计算 localStorage 占用大小
++    try {
++      let total = 0;
++      for (let i = 0; i < localStorage.length; i++) {
++        const key = localStorage.key(i);
++        if (key) total += (key.length + (localStorage.getItem(key)?.length || 0)) * 2; // UTF-16
++      }
++      if (total > 1048576) return `${(total / 1048576).toFixed(1)} MB`;
++      return `${(total / 1024).toFixed(1)} KB`;
++    } catch { return "未知"; }
++  });
+
+diff --git a/src/pages/Profile.tsx b/src/pages/Profile.tsx
+index 799daa6..c30cb08 100644
+--- a/src/pages/Profile.tsx
++++ b/src/pages/Profile.tsx
+@@ -23,9 +23,10 @@
+       setActiveCat(cat);
+
+-      const firstDiary = diaries[diaries.length - 1];
+-      const days = firstDiary
+-        ? Math.max(1, Math.ceil((Date.now() - new Date(firstDiary.createdAt).getTime()) / (1000 * 60 * 60 * 24)))
++      const firstDiary = diaries.length > 0 ? diaries[diaries.length - 1] : null;
++      const firstCreatedAt = firstDiary?.createdAt ? new Date(firstDiary.createdAt).getTime() : NaN;
++      const days = (!isNaN(firstCreatedAt) && firstCreatedAt > 0)
++        ? Math.max(1, Math.ceil((Date.now() - firstCreatedAt) / (1000 * 60 * 60 * 24)))
+         : 1;
