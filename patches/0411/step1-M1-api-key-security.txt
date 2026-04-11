@@ -1,0 +1,211 @@
+diff --git a/server.ts b/server.ts
+index 2cc141f..4b4ca20 100644
+--- a/server.ts
++++ b/server.ts
+@@ -83,29 +83,26 @@ async function startServer() {
+       return res.status(400).json({ error: "缺少必要参数: prompt", code: "INVALID_PARAMETER" });
+     }
+ 
+-    const finalApiKey = req.headers['x-volc-api-key'] as string || ARK_API_KEY;
+-    const finalModelId = req.headers['x-volc-t2i-model-id'] as string || ARK_T2I_MODEL_ID;
+-
+     try {
+-      if (!finalApiKey) {
++      if (!ARK_API_KEY) {
+         return res.status(500).json({ error: "服务器未配置 API Key" });
+       }
+ 
+       const requestBody = {
+-        model: finalModelId,
++        model: ARK_T2I_MODEL_ID,
+         prompt: prompt,
+         size: "1024x1024"
+       };
+ 
+       console.log("Submitting T2I task to Ark:", {
+-        model: finalModelId,
++        model: ARK_T2I_MODEL_ID,
+         url: ARK_T2I_URL,
+         prompt: prompt.substring(0, 50) + "..."
+       });
+ 
+       const response = await axios.post(ARK_T2I_URL, requestBody, {
+         headers: {
+-          'Authorization': `Bearer ${finalApiKey}`,
++          'Authorization': `Bearer ${ARK_API_KEY}`,
+           'Content-Type': 'application/json'
+         },
+         timeout: 60000
+@@ -149,12 +146,10 @@ async function startServer() {
+       return res.json({ status: 'succeeded', image_url: url });
+     }
+ 
+-    const finalApiKey = req.headers['x-volc-api-key'] as string || ARK_API_KEY;
+-
+     try {
+       const response = await axios.get(`${ARK_BASE_URL}/${taskId}`, {
+         headers: {
+-          'Authorization': `Bearer ${finalApiKey}`
++          'Authorization': `Bearer ${ARK_API_KEY}`
+         }
+       });
+       res.json(response.data);
+@@ -222,24 +217,17 @@ async function startServer() {
+         }
+       };
+ 
+-      const frontendApiKey = req.headers['x-volc-api-key'] as string;
+-      const frontendModelId = req.headers['x-volc-model-id'] as string;
+-      
+-      const finalApiKey = frontendApiKey || ARK_API_KEY;
+-      const finalModelId = frontendModelId || ARK_MODEL_ID;
+-
+       console.log("Submitting task to Ark:", {
+-        model: finalModelId,
+-        url: ARK_BASE_URL,
+-        usingFrontendKey: !!frontendApiKey
++        model: ARK_MODEL_ID,
++        url: ARK_BASE_URL
+       });
+ 
+       const response = await axios.post(
+         ARK_BASE_URL,
+-        { ...requestBody, model: finalModelId },
++        requestBody,
+         {
+           headers: {
+-            'Authorization': `Bearer ${finalApiKey}`,
++            'Authorization': `Bearer ${ARK_API_KEY}`,
+             'Content-Type': 'application/json'
+           },
+           maxContentLength: Infinity,
+@@ -264,15 +252,12 @@ async function startServer() {
+       return res.status(400).json({ error: "无效的任务 ID 格式" });
+     }
+ 
+-    const frontendApiKey = req.headers['x-volc-api-key'] as string;
+-    const finalApiKey = frontendApiKey || ARK_API_KEY;
+-
+     try {
+       const response = await axios.get(
+         `${ARK_BASE_URL}/${taskId}`,
+         {
+           headers: {
+-            'Authorization': `Bearer ${finalApiKey}`
++            'Authorization': `Bearer ${ARK_API_KEY}`
+           },
+           timeout: 60000
+         }
+diff --git a/src/pages/Welcome.tsx b/src/pages/Welcome.tsx
+index 7add1ce..978d4bb 100644
+--- a/src/pages/Welcome.tsx
++++ b/src/pages/Welcome.tsx
+@@ -2,7 +2,6 @@ import { useState, useRef, useEffect } from "react";
+ import { useNavigate, useLocation } from "react-router-dom";
+ import { Camera, ArrowRight, Upload, PawPrint, ArrowLeft, Eye, EyeOff, Save, RotateCcw, X, AlertCircle } from "lucide-react";
+ import { motion, AnimatePresence } from "motion/react";
+-import { VolcanoConfig } from "../services/volcanoService";
+ import { useAuthContext } from "../context/AuthContext";
+ import { storage } from "../services/storage";
+ 
+@@ -163,17 +162,14 @@ export default function Welcome() {
+  */
+ function DebugDialog({ onClose, onSave }: { onClose: () => void, onSave: () => void }) {
+   const [config, setConfig] = useState({
+-    VOLC_API_KEY: localStorage.getItem('VOLC_API_KEY') || VolcanoConfig.ApiKey || '',
+-    VOLC_ACCESS_KEY: localStorage.getItem('VOLC_ACCESS_KEY') || '',
+-    VOLC_SECRET_KEY: localStorage.getItem('VOLC_SECRET_KEY') || '',
+-    VOLC_MODEL_ID: localStorage.getItem('VOLC_MODEL_ID') || VolcanoConfig.ModelId || '',
+-    VOLC_T2I_MODEL_ID: localStorage.getItem('VOLC_T2I_MODEL_ID') || VolcanoConfig.T2IModelId || '',
++    // 注意：API Key 已迁移至服务端环境变量，此处配置仅供调试参考
++    VOLC_API_KEY: localStorage.getItem('VOLC_API_KEY') || '',
++    VOLC_MODEL_ID: localStorage.getItem('VOLC_MODEL_ID') || '',
++    VOLC_T2I_MODEL_ID: localStorage.getItem('VOLC_T2I_MODEL_ID') || '',
+   });
+ 
+   const [visible, setVisible] = useState({
+     VOLC_API_KEY: false,
+-    VOLC_ACCESS_KEY: false,
+-    VOLC_SECRET_KEY: false,
+     VOLC_MODEL_ID: false,
+     VOLC_T2I_MODEL_ID: false,
+   });
+@@ -195,11 +191,9 @@ function DebugDialog({ onClose, onSave }: { onClose: () => void, onSave: () => v
+     if (window.confirm("确定要恢复默认配置吗？")) {
+       Object.keys(config).forEach(key => localStorage.removeItem(key));
+       setConfig({
+-        VOLC_API_KEY: VolcanoConfig.ApiKey || '',
+-        VOLC_ACCESS_KEY: '',
+-        VOLC_SECRET_KEY: '',
+-        VOLC_MODEL_ID: VolcanoConfig.ModelId || '',
+-        VOLC_T2I_MODEL_ID: VolcanoConfig.T2IModelId || '',
++        VOLC_API_KEY: '',
++        VOLC_MODEL_ID: '',
++        VOLC_T2I_MODEL_ID: '',
+       });
+     }
+   };
+diff --git a/src/services/volcanoService.ts b/src/services/volcanoService.ts
+index e79112b..89934d8 100644
+--- a/src/services/volcanoService.ts
++++ b/src/services/volcanoService.ts
+@@ -4,34 +4,13 @@ import axios from 'axios';
+  * 火山引擎配置中心 (方舟 Ark 平台)
+  */
+ export const VolcanoConfig = {
+-  // 开启 API 调用
+-  MOCK_MODE: false, 
+-  
+-  // 凭证信息 (从环境变量读取)
+-  ApiKey: import.meta.env.VITE_VOLC_API_KEY,
+-  ModelId: import.meta.env.VITE_VOLC_MODEL_ID || 'doubao-seedance-1-5-pro-251215',
+-  T2IModelId: import.meta.env.VITE_VOLC_T2I_MODEL_ID || 'doubao-t2i-v2',
+-  BaseUrl: 'https://ark.cn-beijing.volces.com/api/v3/contents/generations/tasks',
++  MOCK_MODE: false,
++  // API Key 已迁移至 server.ts 环境变量，前端不再持有凭证
+ };
+ 
+-/**
+- * 统一请求头构建辅助函数
+- */
+-function buildHeaders(options?: { includeT2I?: boolean }) {
+-  const apiKey = localStorage.getItem('VOLC_API_KEY') || VolcanoConfig.ApiKey;
+-
+-  const headers: Record<string, string> = {
+-    'Content-Type': 'application/json',
+-    'X-Volc-API-Key': apiKey || '',
+-  };
+-
+-  if (options?.includeT2I) {
+-    headers['X-Volc-T2I-Model-Id'] = localStorage.getItem('VOLC_T2I_MODEL_ID') || VolcanoConfig.T2IModelId;
+-  } else {
+-    headers['X-Volc-Model-Id'] = localStorage.getItem('VOLC_MODEL_ID') || VolcanoConfig.ModelId;
+-  }
+-
+-  return headers;
++/** 请求头：API Key 已迁移至 server.ts 环境变量，前端不再发送凭证 */
++function buildHeaders() {
++  return { 'Content-Type': 'application/json' };
+ }
+ 
+ /**
+@@ -160,7 +139,7 @@ export class VolcanoService {
+         prompt,
+       }, {
+         timeout: 60000,
+-        headers: buildHeaders({ includeT2I: true })
++        headers: buildHeaders()
+       });
+       
+       const taskId = response.data?.id || response.data?.task_id || response.data?.data?.id;
+@@ -206,9 +185,7 @@ export class VolcanoService {
+       let result: any;
+       try {
+         const response = await axios.get(`/api/image-status/${taskId}`, {
+-          headers: {
+-            'X-Volc-API-Key': localStorage.getItem('VOLC_API_KEY') || VolcanoConfig.ApiKey
+-          },
++          headers: buildHeaders(),
+           signal
+         });
+         result = response.data;

@@ -20,8 +20,9 @@ export default function PageHeader({ title, subtitle, action, dark, onBack }: Pa
     >
       <div className="flex items-center gap-3 mt-2">
         {onBack && (
-          <button 
+          <button
             onClick={onBack}
+            aria-label="返回"
             className={`p-2 -ml-2 active:scale-90 transition-transform ${dark ? 'text-white/80' : 'text-on-surface-variant'}`}
           >
             <ArrowLeft size={24} />
