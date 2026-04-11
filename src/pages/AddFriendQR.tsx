@@ -39,7 +39,7 @@ export default function AddFriendQR() {
       try {
         const canvas = await html2canvas(qrCardRef.current, {
           useCORS: true,
-          allowTaint: false,
+          allowTaint: true,
           backgroundColor: '#FFFFFF',
           scale: 2,
           logging: false,
@@ -56,7 +56,7 @@ export default function AddFriendQR() {
       } else {
         prerender();
       }
-    }, 500);
+    }, 1500);
     return () => clearTimeout(timer);
   }, [cat, user]);
 
@@ -115,7 +115,7 @@ export default function AddFriendQR() {
 
         const canvas = await html2canvas(qrCardRef.current, {
           useCORS: true,
-          allowTaint: false,
+          allowTaint: true,
           backgroundColor: '#FFFFFF',
           scale: 3,
           logging: false,
@@ -146,14 +146,18 @@ export default function AddFriendQR() {
         }
       }
 
-      // Stage 2: <a download> 触发浏览器下载
+      // Stage 2: <a download> + Blob URL 触发浏览器下载
       try {
+        const res = await fetch(dataUrl);
+        const blob = await res.blob();
+        const blobUrl = URL.createObjectURL(blob);
         const a = document.createElement('a');
-        a.href = dataUrl;
+        a.href = blobUrl;
         a.download = fileName;
         document.body.appendChild(a);
         a.click();
         document.body.removeChild(a);
+        URL.revokeObjectURL(blobUrl);
         showToast("图片已保存到下载目录");
         return;
       } catch (e) {
@@ -253,11 +257,13 @@ export default function AddFriendQR() {
       />
 
       <div className="flex-grow flex flex-col items-center justify-evenly px-6 py-2">
-        {/* 名片卡片区 */}
-        <motion.div 
-          ref={qrCardRef}
+        {/* 名片卡片区 — 外层 motion 负责入场动画，内层 div 供 html2canvas 截图 */}
+        <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
+        >
+        <div
+          ref={qrCardRef}
           className="bg-white p-6 rounded-[40px] shadow-[0_15px_45px_rgba(0,0,0,0.06)] flex flex-col items-center w-full max-w-[320px] border border-outline-variant/20 relative overflow-hidden"
         >
           <div className="absolute top-0 left-0 w-full h-1.5 bg-gradient-to-r from-primary to-secondary opacity-20"></div>
@@ -315,6 +321,7 @@ export default function AddFriendQR() {
           <p className="text-[10px] text-on-surface-variant font-medium opacity-60 text-center leading-tight">
             让好友打开 Miao 扫描上方二维码<br/>即可建立跨时空的温暖连接
           </p>
+        </div>
         </motion.div>
 
         {/* 底部按钮区 */}
