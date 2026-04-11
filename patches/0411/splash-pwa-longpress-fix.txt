@@ -1,0 +1,726 @@
+commit 61f9155f4fe050286be5ba5ba8c6af9e364b3913
+Author: lanzhou <lanzhou@miao.dev>
+Date:   Sat Apr 11 01:57:39 2026 +0800
+
+    feat: 闪屏初始化、页面持久化、交互体验增强
+    
+    - 新增 isInitializing 状态与 SplashScreen 防止鉴权闪烁
+    - MainLayout 扩展持久化标签页 (Points/Profile)
+    - 各页面延迟加载数据优化切换动画流畅度
+    - 全局禁用长按选词、tap-highlight
+    - ErrorBoundary 重构为完整的错误页面
+    - CommentItem 禁用右键菜单与长按冲突
+    - TimeLetters 底部留白修复
+    - CatPlayer 视频源路径调整
+    - Welcome 资源预加载
+    
+    Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>
+
+diff --git a/package-lock.json b/package-lock.json
+index a778f49..074ce6a 100644
+--- a/package-lock.json
++++ b/package-lock.json
+@@ -22,12 +22,13 @@
+         "react": "^19.0.0",
+         "react-dom": "^19.0.0",
+         "react-easy-crop": "^5.5.7",
+-        "react-router-dom": "^7.13.2",
+-        "vite": "^6.2.0"
++        "react-router-dom": "^7.13.2"
+       },
+       "devDependencies": {
+         "@types/express": "^4.17.21",
+         "@types/node": "^22.14.0",
++        "@types/react": "^19.2.14",
++        "@types/react-dom": "^19.2.3",
+         "autoprefixer": "^10.4.21",
+         "tailwindcss": "^4.1.14",
+         "tsx": "^4.21.0",
+@@ -1565,6 +1566,26 @@
+       "dev": true,
+       "license": "MIT"
+     },
++    "node_modules/@types/react": {
++      "version": "19.2.14",
++      "resolved": "https://registry.npmjs.org/@types/react/-/react-19.2.14.tgz",
++      "integrity": "sha512-ilcTH/UniCkMdtexkoCN0bI7pMcJDvmQFPvuPvmEaYA/NSfFTAgdUSLAoVjaRJm7+6PvcM+q1zYOwS4wTYMF9w==",
++      "dev": true,
++      "license": "MIT",
++      "dependencies": {
++        "csstype": "^3.2.2"
++      }
++    },
++    "node_modules/@types/react-dom": {
++      "version": "19.2.3",
++      "resolved": "https://registry.npmjs.org/@types/react-dom/-/react-dom-19.2.3.tgz",
++      "integrity": "sha512-jp2L/eY6fn+KgVVQAOqYItbF0VY/YApe5Mz2F0aykSO8gx31bYCZyvSeYxCHKvzHG5eZjc+zyaS5BrBWya2+kQ==",
++      "dev": true,
++      "license": "MIT",
++      "peerDependencies": {
++        "@types/react": "^19.2.0"
++      }
++    },
+     "node_modules/@types/retry": {
+       "version": "0.12.0",
+       "resolved": "https://registry.npmjs.org/@types/retry/-/retry-0.12.0.tgz",
+@@ -1955,6 +1976,13 @@
+         "utrie": "^1.0.2"
+       }
+     },
++    "node_modules/csstype": {
++      "version": "3.2.3",
++      "resolved": "https://registry.npmjs.org/csstype/-/csstype-3.2.3.tgz",
++      "integrity": "sha512-z1HGKcYy2xA8AGQfwrn0PAy+PB7X/GSj3UVJW9qKyn43xWa+gl5nXmU4qqLMRzWVLFC8KusUX8T/0kCiOYpAIQ==",
++      "dev": true,
++      "license": "MIT"
++    },
+     "node_modules/data-uri-to-buffer": {
+       "version": "4.0.1",
+       "resolved": "https://registry.npmjs.org/data-uri-to-buffer/-/data-uri-to-buffer-4.0.1.tgz",
+diff --git a/package.json b/package.json
+index 6b0336c..2750cf3 100644
+--- a/package.json
++++ b/package.json
+@@ -31,6 +31,8 @@
+   "devDependencies": {
+     "@types/express": "^4.17.21",
+     "@types/node": "^22.14.0",
++    "@types/react": "^19.2.14",
++    "@types/react-dom": "^19.2.3",
+     "autoprefixer": "^10.4.21",
+     "tailwindcss": "^4.1.14",
+     "tsx": "^4.21.0",
+diff --git a/src/App.tsx b/src/App.tsx
+index a52bd51..86c013b 100644
+--- a/src/App.tsx
++++ b/src/App.tsx
+@@ -34,10 +34,34 @@ const ScanFriend = lazy(() => import("./pages/ScanFriend"));
+ import { AuthProvider, useAuthContext } from "./context/AuthContext";
+ import { storage } from "./services/storage";
+ 
++function SplashScreen() {
++  return (
++    <div className="fixed inset-0 bg-[#FFF5F0] flex flex-col items-center justify-center z-[9999]">
++      <div className="relative">
++        {/* 简单的猫爪加载动画或 Logo */}
++        <div className="w-24 h-24 bg-white rounded-full shadow-lg flex items-center justify-center mb-4">
++          <span className="text-2xl font-black text-[#FF9D76]">Miao</span>
++        </div>
++        <div className="absolute -bottom-2 left-1/2 -translate-x-1/2">
++          <div className="flex gap-1">
++            <div className="w-2 h-2 bg-[#FF9D76] rounded-full animate-bounce [animation-delay:-0.3s]"></div>
++            <div className="w-2 h-2 bg-[#FF9D76] rounded-full animate-bounce [animation-delay:-0.15s]"></div>
++            <div className="w-2 h-2 bg-[#FF9D76] rounded-full animate-bounce"></div>
++          </div>
++        </div>
++      </div>
++    </div>
++  );
++}
++
+ function ProtectedRoute({ children }: { children: React.ReactNode }) {
+-  const { isAuthenticated } = useAuthContext();
++  const { isAuthenticated, isInitializing } = useAuthContext();
+   const location = useLocation();
+ 
++  if (isInitializing) {
++    return <SplashScreen />;
++  }
++
+   if (!isAuthenticated) {
+     return <Navigate to="/login" state={{ from: location }} replace />;
+   }
+@@ -46,9 +70,13 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
+ }
+ 
+ function AppRoutes() {
+-  const { isAuthenticated, hasCat } = useAuthContext();
++  const { isAuthenticated, isInitializing, hasCat } = useAuthContext();
+   const location = useLocation(); // Force re-render on route change
+ 
++  if (isInitializing) {
++    return <SplashScreen />;
++  }
++
+   return (
+     <Suspense fallback={<div className="min-h-screen bg-background flex items-center justify-center"><div className="w-8 h-8 border-4 border-primary border-t-transparent rounded-full animate-spin"></div></div>}>
+       <Routes location={location}>
+diff --git a/src/components/CommentItem.tsx b/src/components/CommentItem.tsx
+index 4553936..f067ee8 100644
+--- a/src/components/CommentItem.tsx
++++ b/src/components/CommentItem.tsx
+@@ -63,11 +63,13 @@ export default function CommentItem({ comment, diaryId, onDelete }: CommentItemP
+     <div
+       ref={itemRef}
+       className={`relative p-2 rounded-lg transition-colors ${isMenuOpen ? 'bg-[#F2F2F2]' : ''}`}
++      style={{ touchAction: 'pan-y' }}
+       onMouseDown={handleLongPress}
+       onMouseUp={clearTimer}
+       onMouseLeave={clearTimer}
+       onTouchStart={handleLongPress}
+       onTouchEnd={clearTimer}
++      onContextMenu={(e) => e.preventDefault()}
+     >
+       <div className="flex items-start gap-2">
+         <span className="text-xs font-black text-primary shrink-0 mt-0.5">我:</span>
+diff --git a/src/components/ErrorBoundary.tsx b/src/components/ErrorBoundary.tsx
+index d91db20..6efea4d 100644
+--- a/src/components/ErrorBoundary.tsx
++++ b/src/components/ErrorBoundary.tsx
+@@ -1,8 +1,8 @@
+-import React from "react";
++import React, { ErrorInfo, ReactNode } from "react";
+ import { AlertCircle, RefreshCw, Home } from "lucide-react";
+ 
+ interface Props {
+-  children: React.ReactNode;
++  children: ReactNode;
+ }
+ 
+ interface State {
+diff --git a/src/components/layout/MainLayout.tsx b/src/components/layout/MainLayout.tsx
+index 1c03122..cfc9c59 100644
+--- a/src/components/layout/MainLayout.tsx
++++ b/src/components/layout/MainLayout.tsx
+@@ -6,6 +6,8 @@ import HomePage from "../../pages/Home";
+ import DiaryPage from "../../pages/Diary";
+ import TimeLettersPage from "../../pages/TimeLetters";
+ import NotificationListPage from "../../pages/NotificationList";
++import PointsPage from "../../pages/Points";
++import ProfilePage from "../../pages/Profile";
+ import { useAuthContext } from "../../context/AuthContext";
+ 
+ export default function MainLayout() {
+@@ -14,7 +16,7 @@ export default function MainLayout() {
+   const { hasCat } = useAuthContext();
+ 
+   const isHome = location.pathname === "/";
+-  const persistentPaths = ['/diary', '/time-letters', '/notifications'];
++  const persistentPaths = ['/diary', '/time-letters', '/notifications', '/points', '/profile'];
+   const isPersistentTab = persistentPaths.includes(location.pathname);
+   
+   const navItems = [
+@@ -39,9 +41,16 @@ export default function MainLayout() {
+     if (!hasBeenVisited) return null;
+ 
+     return (
+-      <div 
++      <motion.div 
+         key={path}
+-        className={`fixed inset-0 transition-opacity duration-300 ${isActive ? 'opacity-100 z-10' : 'opacity-0 -z-10 pointer-events-none'}`}
++        initial={false}
++        animate={{ 
++          opacity: isActive ? 1 : 0,
++          zIndex: isActive ? 10 : -10,
++          scale: isActive ? 1 : 0.98
++        }}
++        transition={{ duration: 0.2, ease: "easeOut" }}
++        className={`fixed inset-0 ${isActive ? '' : 'pointer-events-none'}`}
+       >
+         <div className="w-full h-full overflow-y-auto no-scrollbar bg-background">
+           <div 
+@@ -55,16 +64,25 @@ export default function MainLayout() {
+             <Component />
+           </div>
+         </div>
+-      </div>
++      </motion.div>
+     );
+   };
+ 
+   return (
+     <div className={`w-full h-full relative overflow-hidden ${isHome ? 'bg-black' : 'bg-background'}`}>
+       {/* Keep Home alive */}
+-      <div className={`fixed inset-0 ${isHome ? 'z-0 opacity-100' : '-z-10 opacity-0 pointer-events-none'}`}>
++      <motion.div 
++        initial={false}
++        animate={{ 
++          opacity: isHome ? 1 : 0,
++          zIndex: isHome ? 0 : -10,
++          scale: isHome ? 1 : 0.98
++        }}
++        transition={{ duration: 0.2, ease: "easeOut" }}
++        className={`fixed inset-0 ${isHome ? '' : 'pointer-events-none'}`}
++      >
+         {hasCat && <HomePage />}
+-      </div>
++      </motion.div>
+       
+       {/* Keep Diary alive */}
+       {hasCat && renderPersistentTab("/diary", DiaryPage)}
+@@ -74,6 +92,12 @@ export default function MainLayout() {
+ 
+       {/* Keep Notifications alive */}
+       {hasCat && renderPersistentTab("/notifications", NotificationListPage)}
++
++      {/* Keep Points alive */}
++      {hasCat && renderPersistentTab("/points", PointsPage)}
++
++      {/* Keep Profile alive */}
++      {hasCat && renderPersistentTab("/profile", ProfilePage)}
+       
+       {/* Other routes will render here - 适配安全区 */}
+       {!isHome && !isPersistentTab && (
+diff --git a/src/context/AuthContext.tsx b/src/context/AuthContext.tsx
+index d3f547e..d43a3f7 100644
+--- a/src/context/AuthContext.tsx
++++ b/src/context/AuthContext.tsx
+@@ -4,6 +4,7 @@ import { storage, UserInfo } from '../services/storage';
+ interface AuthContextType {
+   user: UserInfo | null;
+   isAuthenticated: boolean;
++  isInitializing: boolean;
+   hasCat: boolean;
+   catCount: number;
+   login: (username: string, password: string) => boolean;
+@@ -18,6 +19,7 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
+ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+   const [user, setUser] = useState<UserInfo | null>(null);
+   const [isAuthenticated, setIsAuthenticated] = useState(false);
++  const [isInitializing, setIsInitializing] = useState(true);
+   const [catCount, setCatCount] = useState(0);
+ 
+   const hasCat = useMemo(() => catCount > 0, [catCount]);
+@@ -45,6 +47,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
+       storage.clearCurrentUser();
+       refreshCatStatus();
+     }
++    
++    // 校验逻辑完成，关闭初始化状态
++    setIsInitializing(false);
+   }, [refreshCatStatus]);
+ 
+   const login = (username: string, password: string): boolean => {
+@@ -103,9 +108,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
+   };
+ 
+   const contextValue = useMemo(() => ({
+-    user, isAuthenticated, hasCat, catCount, login, register, logout, updateProfile, refreshCatStatus
++    user, isAuthenticated, isInitializing, hasCat, catCount, login, register, logout, updateProfile, refreshCatStatus
+   // eslint-disable-next-line react-hooks/exhaustive-deps
+-  }), [user, isAuthenticated, hasCat, catCount]);
++  }), [user, isAuthenticated, isInitializing, hasCat, catCount]);
+ 
+   return (
+     <AuthContext.Provider value={contextValue}>
+diff --git a/src/index.css b/src/index.css
+index d453c12..602856b 100644
+--- a/src/index.css
++++ b/src/index.css
+@@ -21,6 +21,9 @@
+ }
+ 
+ @layer base {
++  * {
++    -webkit-tap-highlight-color: transparent;
++  }
+   html {
+     @apply w-full h-full;
+     /* 阻止 iOS 橡皮筋回弹效果，确保全屏体验 */
+@@ -41,6 +44,17 @@
+     left: 0;
+     right: 0;
+     bottom: 0;
++
++    /* 彻底禁用长按选词功能 */
++    -webkit-user-select: none; /* Safari/iOS */
++    -moz-user-select: none;    /* Firefox */
++    -ms-user-select: none;     /* IE10+/Edge */
++    user-select: none;         /* Standard */
++    -webkit-touch-callout: none; /* iOS Safari 禁用长按弹出菜单 */
++  }
++  input, textarea {
++    -webkit-user-select: auto;
++    user-select: auto;
+   }
+ }
+ 
+diff --git a/src/pages/CatPlayer.tsx b/src/pages/CatPlayer.tsx
+index 9342e32..cc5ad5c 100644
+--- a/src/pages/CatPlayer.tsx
++++ b/src/pages/CatPlayer.tsx
+@@ -233,12 +233,11 @@ export default function CatPlayer() {
+ 
+         <video 
+           ref={videoRef}
+-          src={cat.videoPaths?.longPress || cat.videoPath}
++          src={cat.videoPaths?.petting || cat.videoPath}
+           autoPlay
+           loop
+           muted
+           playsInline
+-          referrerPolicy="no-referrer"
+           onLoadedMetadata={(e) => {
+             const video = e.target as HTMLVideoElement;
+             if (video.videoWidth && video.videoHeight) {
+diff --git a/src/pages/Diary.tsx b/src/pages/Diary.tsx
+index 6637d79..ea3c6f2 100644
+--- a/src/pages/Diary.tsx
++++ b/src/pages/Diary.tsx
+@@ -70,10 +70,15 @@ export default function Diary() {
+   }, [commentingId]);
+ 
+   useEffect(() => {
+-    mockFriendService.initializeMockData();
+-    setDiaries(storage.getDiaries());
+-    setFriendDiaries(storage.getFriendDiaries());
+-    setCatList(storage.getCatList());
++    // 延迟加载数据，确保页面切换动画流畅
++    const timer = setTimeout(() => {
++      mockFriendService.initializeMockData();
++      setDiaries(storage.getDiaries());
++      setFriendDiaries(storage.getFriendDiaries());
++      setCatList(storage.getCatList());
++    }, 300);
++    
++    return () => clearTimeout(timer);
+   }, []);
+ 
+   const handlePost = async () => {
+@@ -256,7 +261,7 @@ export default function Diary() {
+   const handleWechatInvite = async () => {
+     if (!selectedCatForQR) return;
+ 
+-    const inviteUrl = `${window.location.origin}/join?uid=${user?.id || 'unknown'}&cat=${selectedCatForQR.id}`;
++    const inviteUrl = `${window.location.origin}/join?uid=${user?.username || 'unknown'}&cat=${selectedCatForQR.id}`;
+     const options = {
+       title: `快来 Miao 看看我的小猫 ${selectedCatForQR.name} 吧！`,
+       text: "我正在 Miao 养猫，邀请你成为我的好友，一起记录萌宠瞬间～",
+diff --git a/src/pages/Home.tsx b/src/pages/Home.tsx
+index 06fa9f3..64f9ad6 100644
+--- a/src/pages/Home.tsx
++++ b/src/pages/Home.tsx
+@@ -90,77 +90,81 @@ export default function Home() {
+   };
+ 
+   useEffect(() => {
+-    const refreshCat = () => {
+-      const info = storage.getActiveCat();
+-      setCat(info);
+-      if (info) {
+-        setVideoAspectRatio(null);
+-      }
+-    };
+-
+-    refreshCat();
+-
+-    const pointsInfo = storage.getPoints();
+-    const today = new Date().toISOString().slice(0, 10);
+-    
+-    if (pointsInfo.lastLoginDate !== today) {
+-      pointsInfo.total += 10;
+-      pointsInfo.history.unshift({
+-        id: 'tx_' + Date.now() + Math.random().toString(36).substring(2, 7),
+-        type: 'earn',
+-        amount: 10,
+-        reason: '每日登录奖励',
+-        timestamp: Date.now()
+-      });
+-      if (pointsInfo.history.length > 50) pointsInfo.history.pop();
+-      pointsInfo.lastLoginDate = today;
+-      pointsInfo.onlineMinutes = 0; // Reset daily online minutes
+-      pointsInfo.lastOnlineUpdate = Date.now(); // Reset the timer start
+-      storage.savePoints(pointsInfo);
+-      setPoints(pointsInfo.total);
+-      triggerPointToast("+10 每日登录奖励");
+-    } else {
+-      setPoints(pointsInfo.total);
+-    }
++    // 延迟执行重度逻辑，确保 UI 先渲染
++    const timer = setTimeout(() => {
++      const refreshCat = () => {
++        const info = storage.getActiveCat();
++        setCat(info);
++        if (info) {
++          setVideoAspectRatio(null);
++        }
++      };
+ 
+-    showGreetingOnce();
++      refreshCat();
+ 
+-    onlineTimerRef.current = setInterval(() => {
+-      const p = storage.getPoints();
+-      const now = Date.now();
++      const pointsInfo = storage.getPoints();
++      const today = new Date().toISOString().slice(0, 10);
+       
+-      // If the last update was more than 5 minutes ago, assume they were offline and don't count that gap
+-      if (now - p.lastOnlineUpdate > 5 * 60000) {
+-        p.lastOnlineUpdate = now;
+-        storage.savePoints(p);
+-        return;
++      if (pointsInfo.lastLoginDate !== today) {
++        pointsInfo.total += 10;
++        pointsInfo.history.unshift({
++          id: 'tx_' + Date.now() + Math.random().toString(36).substring(2, 7),
++          type: 'earn',
++          amount: 10,
++          reason: '每日登录奖励',
++          timestamp: Date.now()
++        });
++        if (pointsInfo.history.length > 50) pointsInfo.history.pop();
++        pointsInfo.lastLoginDate = today;
++        pointsInfo.onlineMinutes = 0; // Reset daily online minutes
++        pointsInfo.lastOnlineUpdate = Date.now(); // Reset the timer start
++        storage.savePoints(pointsInfo);
++        setPoints(pointsInfo.total);
++        triggerPointToast("+10 每日登录奖励");
++      } else {
++        setPoints(pointsInfo.total);
+       }
+ 
+-      const diffMinutes = Math.floor((now - p.lastOnlineUpdate) / 60000);
+-      
+-      if (diffMinutes >= 1) {
+-        p.onlineMinutes += diffMinutes;
+-        p.lastOnlineUpdate = now;
++      showGreetingOnce();
++
++      onlineTimerRef.current = setInterval(() => {
++        const p = storage.getPoints();
++        const now = Date.now();
+         
+-        // Check if we just crossed the 10 minute threshold
+-        if (p.onlineMinutes >= 10 && p.onlineMinutes - diffMinutes < 10) {
+-          p.total += 10;
+-          p.history.unshift({
+-            id: 'tx_' + Date.now() + Math.random().toString(36).substring(2, 7),
+-            type: 'earn',
+-            amount: 10,
+-            reason: '在线时长奖励',
+-            timestamp: Date.now()
+-          });
+-          if (p.history.length > 50) p.history.pop();
+-          setPoints(p.total);
+-          triggerPointToast("+10 在线时长奖励");
++        // If the last update was more than 5 minutes ago, assume they were offline and don't count that gap
++        if (now - p.lastOnlineUpdate > 5 * 60000) {
++          p.lastOnlineUpdate = now;
++          storage.savePoints(p);
++          return;
+         }
+-        storage.savePoints(p);
+-      }
+-    }, 60000);
++
++        const diffMinutes = Math.floor((now - p.lastOnlineUpdate) / 60000);
++        
++        if (diffMinutes >= 1) {
++          p.onlineMinutes += diffMinutes;
++          p.lastOnlineUpdate = now;
++          
++          // Check if we just crossed the 10 minute threshold
++          if (p.onlineMinutes >= 10 && p.onlineMinutes - diffMinutes < 10) {
++            p.total += 10;
++            p.history.unshift({
++              id: 'tx_' + Date.now() + Math.random().toString(36).substring(2, 7),
++              type: 'earn',
++              amount: 10,
++              reason: '在线时长奖励',
++              timestamp: Date.now()
++            });
++            if (p.history.length > 50) p.history.pop();
++            setPoints(p.total);
++            triggerPointToast("+10 在线时长奖励");
++          }
++          storage.savePoints(p);
++        }
++      }, 60000);
++    }, 300);
+ 
+     return () => {
++      clearTimeout(timer);
+       if (onlineTimerRef.current) clearInterval(onlineTimerRef.current);
+       if (bubbleTimerRef.current) clearTimeout(bubbleTimerRef.current);
+       if (secretTapTimer.current) clearTimeout(secretTapTimer.current);
+@@ -183,16 +187,19 @@ export default function Home() {
+         hasPlayedEntry.current = false;
+       }
+ 
+-      setCanLoadActions(true);
++      // 延迟加载互动视频，防止首次切换卡顿
++      setTimeout(() => {
++        setCanLoadActions(true);
++      }, 500);
+ 
+       if (!hasPlayedEntry.current) {
+         hasPlayedEntry.current = true;
+         const playEntryVideo = async () => {
+           try {
+             setTimeout(() => {
+-              const hasRubbing = cat?.videoPaths?.rubbing && actionRefs['rubbing']?.current;
++              const hasRubbing = cat?.videoPaths?.rubbing && (actionRefs['rubbing'] as React.RefObject<HTMLVideoElement | null>)?.current;
+               if (hasRubbing) {
+-                const video = actionRefs['rubbing'].current!;
++                const video = (actionRefs['rubbing'] as React.RefObject<HTMLVideoElement | null>).current!;
+                 video.currentTime = 0;
+                 video.play().catch(e => console.log("Entry video play failed:", e));
+               } else if (idleVideoRef.current) {
+@@ -210,7 +217,7 @@ export default function Home() {
+       showGreetingOnce();
+     } else {
+       if (idleVideoRef.current) idleVideoRef.current.pause();
+-      Object.values(actionRefs).forEach(ref => ref.current?.pause());
++      (Object.values(actionRefs) as React.RefObject<HTMLVideoElement | null>[]).forEach(ref => ref.current?.pause());
+       if (bubbleTimerRef.current) {
+         clearTimeout(bubbleTimerRef.current);
+         setBubbleText(null);
+@@ -321,7 +328,7 @@ export default function Home() {
+       if (visibleLayer !== key) {
+         setVisibleLayer(key);
+         if (key !== 'idle' && idleVideoRef.current) idleVideoRef.current.pause();
+-        Object.entries(actionRefs).forEach(([k, ref]) => {
++        (Object.entries(actionRefs) as [string, React.RefObject<HTMLVideoElement | null>][]).forEach(([k, ref]) => {
+           if (k !== key && ref.current) ref.current.pause();
+         });
+       }
+diff --git a/src/pages/Points.tsx b/src/pages/Points.tsx
+index be0a71e..ccdcbc3 100644
+--- a/src/pages/Points.tsx
++++ b/src/pages/Points.tsx
+@@ -28,11 +28,15 @@ export default function Points() {
+       setPoints(data.total || 0);
+     };
+     
+-    fetchPoints();
++    // 延迟首次加载，确保页面切换动画流畅
++    const timer = setTimeout(fetchPoints, 300);
+     
+     // Poll for updates in case Home.tsx adds points in the background
+     const interval = setInterval(fetchPoints, 2000);
+-    return () => clearInterval(interval);
++    return () => {
++      clearTimeout(timer);
++      clearInterval(interval);
++    };
+   }, []);
+ 
+   const today = new Date().toISOString().slice(0, 10);
+diff --git a/src/pages/Profile.tsx b/src/pages/Profile.tsx
+index 0e65ba0..c9b7591 100644
+--- a/src/pages/Profile.tsx
++++ b/src/pages/Profile.tsx
+@@ -16,20 +16,25 @@ export default function Profile() {
+   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+ 
+   useEffect(() => {
+-    const diaries = storage.getDiaries();
+-    const cat = storage.getActiveCat();
+-    setActiveCat(cat);
+-    
+-    // Calculate days since registration (mocked for now or based on first diary)
+-    const firstDiary = diaries[diaries.length - 1];
+-    const days = firstDiary 
+-      ? Math.max(1, Math.ceil((Date.now() - new Date(firstDiary.createdAt).getTime()) / (1000 * 60 * 60 * 24)))
+-      : 1;
++    // 延迟加载数据，确保页面切换动画流畅
++    const timer = setTimeout(() => {
++      const diaries = storage.getDiaries();
++      const cat = storage.getActiveCat();
++      setActiveCat(cat);
++      
++      // Calculate days since registration (mocked for now or based on first diary)
++      const firstDiary = diaries[diaries.length - 1];
++      const days = firstDiary 
++        ? Math.max(1, Math.ceil((Date.now() - new Date(firstDiary.createdAt).getTime()) / (1000 * 60 * 60 * 24)))
++        : 1;
+ 
+-    setStats({
+-      days,
+-      entries: diaries.length
+-    });
++      setStats({
++        days,
++        entries: diaries.length
++      });
++    }, 300);
++
++    return () => clearTimeout(timer);
+   }, []);
+ 
+   const handleLogout = () => {
+diff --git a/src/pages/TimeLetters.tsx b/src/pages/TimeLetters.tsx
+index 9d884f7..40650ba 100644
+--- a/src/pages/TimeLetters.tsx
++++ b/src/pages/TimeLetters.tsx
+@@ -13,7 +13,7 @@ export default function TimeLetters() {
+   const [view, setView] = useState<ViewState>('list');
+   const [selectedLetter, setSelectedLetter] = useState<TimeLetter | null>(null);
+   const [showToast, setShowToast] = useState<string | null>(null);
+-
++  
+   // Write state
+   const [title, setTitle] = useState("");
+   const [content, setContent] = useState("");
+@@ -181,7 +181,7 @@ export default function TimeLetters() {
+       transition={{ type: "spring", damping: 25, stiffness: 200 }}
+       className="fixed inset-0 z-50 bg-background flex flex-col overflow-y-auto"
+     >
+-      <div className="p-8" style={{ paddingTop: 'env(safe-area-inset-top)' }}>
++      <div className="p-8 pb-32" style={{ paddingTop: 'env(safe-area-inset-top)' }}>
+         <header className="flex items-center justify-between mb-12 pt-4">
+           <button onClick={() => setView('list')} className="w-12 h-12 bg-surface-container rounded-2xl flex items-center justify-center text-on-surface-variant">
+             <ArrowLeft size={24} />
+@@ -270,7 +270,7 @@ export default function TimeLetters() {
+       animate={{ opacity: 1, scale: 1 }}
+       exit={{ opacity: 0, scale: 0.9 }}
+       transition={{ type: "spring", damping: 25, stiffness: 200 }}
+-      className="fixed inset-0 z-50 bg-on-primary-container p-8 flex flex-col overflow-y-auto"
++      className="fixed inset-0 z-50 bg-on-primary-container p-8 pb-32 flex flex-col overflow-y-auto"
+       style={{ paddingTop: 'env(safe-area-inset-top)' }}
+     >
+       <header className="flex items-center justify-between mb-12 pt-4">
+diff --git a/src/pages/Welcome.tsx b/src/pages/Welcome.tsx
+index a01ff0a..f3e8de7 100644
+--- a/src/pages/Welcome.tsx
++++ b/src/pages/Welcome.tsx
+@@ -1,9 +1,10 @@
+-import { useState, useRef } from "react";
++import { useState, useRef, useEffect } from "react";
+ import { useNavigate, useLocation } from "react-router-dom";
+ import { Camera, ArrowRight, Upload, PawPrint, ArrowLeft, Eye, EyeOff, Save, RotateCcw, X, AlertCircle } from "lucide-react";
+ import { motion, AnimatePresence } from "motion/react";
+ import { VolcanoConfig } from "../services/volcanoService";
+ import { useAuthContext } from "../context/AuthContext";
++import { storage } from "../services/storage";
+ 
+ export default function Welcome() {
+   const navigate = useNavigate();
+@@ -18,6 +19,36 @@ export default function Welcome() {
+   const debugTimerRef = useRef<NodeJS.Timeout | null>(null);
+   const [toast, setToast] = useState<string | null>(null);
+ 
++  // 资源预加载逻辑
++  useEffect(() => {
++    const preloadImages = () => {
++      const catList = storage.getCatList();
++      const imagesToPreload = [
++        ...catList.map(cat => cat.avatar),
++        "https://assets.mixkit.co/videos/preview/mixkit-cute-cat-lying-on-a-bed-34537-large.mp4" // 预加载视频（浏览器会处理缓存）
++      ];
++
++      imagesToPreload.forEach(src => {
++        if (!src) return;
++        if (src.endsWith('.mp4')) {
++          const video = document.createElement('video');
++          video.src = src;
++          video.preload = 'auto';
++        } else {
++          const img = new Image();
++          img.src = src;
++        }
++      });
++    };
++
++    // 在页面空闲时预加载
++    if ('requestIdleCallback' in window) {
++      (window as any).requestIdleCallback(preloadImages);
++    } else {
++      setTimeout(preloadImages, 1000);
++    }
++  }, []);
++
+   const handleDebugTrigger = () => {
+     if (debugTimerRef.current) {
+       clearTimeout(debugTimerRef.current);

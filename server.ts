@@ -12,36 +12,6 @@ async function startServer() {
 
   app.use(express.json({ limit: '50mb' }));
 
-  // H-01: 简易内存限流 — 每 IP 每分钟最多 30 次请求
-  const rateLimitMap = new Map<string, { count: number; resetAt: number }>();
-  const RATE_LIMIT_WINDOW = 60_000; // 1 分钟
-  const RATE_LIMIT_MAX = 30;
-
-  app.use('/api/', (req: any, res: any, next: any) => {
-    const ip = req.ip || req.socket.remoteAddress || 'unknown';
-    const now = Date.now();
-    const entry = rateLimitMap.get(ip);
-
-    if (!entry || now > entry.resetAt) {
-      rateLimitMap.set(ip, { count: 1, resetAt: now + RATE_LIMIT_WINDOW });
-      return next();
-    }
-
-    entry.count++;
-    if (entry.count > RATE_LIMIT_MAX) {
-      return res.status(429).json({ error: "请求过于频繁，请稍后再试", code: "RATE_LIMITED" });
-    }
-    next();
-  });
-
-  // 定期清理过期条目防止内存泄漏
-  setInterval(() => {
-    const now = Date.now();
-    for (const [ip, entry] of rateLimitMap) {
-      if (now > entry.resetAt) rateLimitMap.delete(ip);
-    }
-  }, RATE_LIMIT_WINDOW);
-
   const ARK_API_KEY = process.env.VOLC_API_KEY;
   const ARK_MODEL_ID = process.env.VOLC_MODEL_ID || "doubao-seedance-1-5-pro-251215";
   const ARK_T2I_MODEL_ID = process.env.VOLC_T2I_MODEL_ID || "doubao-t2i-v2";
@@ -97,10 +67,10 @@ async function startServer() {
       });
     }
 
-    res.status(status).json({
+    res.status(status).json({ 
       error: defaultMessage,
-      // 仅开发环境返回上游错误详情，生产环境隐藏
-      ...(isProduction ? {} : { message: errorMessage })
+      message: errorMessage
+      // detail 字段已移除：生产环境不返回上游错误原始数据
     });
   };
 
@@ -326,7 +296,7 @@ async function startServer() {
 
   process.on('uncaughtException', (err) => {
     console.error('Uncaught Exception:', err);
-    // 不立即 exit，让进程管理器（pm2/docker）负责重启
+    process.exit(1);
   });
 }
 

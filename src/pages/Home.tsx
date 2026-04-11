@@ -100,7 +100,7 @@ export default function Home() {
     const timer = setTimeout(() => {
       const pointsInfo = storage.getPoints();
       const today = new Date().toISOString().slice(0, 10);
-
+      
       if (pointsInfo.lastLoginDate !== today) {
         pointsInfo.total += 10;
         pointsInfo.history.unshift({
@@ -112,8 +112,8 @@ export default function Home() {
         });
         if (pointsInfo.history.length > 50) pointsInfo.history.pop();
         pointsInfo.lastLoginDate = today;
-        pointsInfo.onlineMinutes = 0;
-        pointsInfo.lastOnlineUpdate = Date.now();
+        pointsInfo.onlineMinutes = 0; // Reset daily online minutes
+        pointsInfo.lastOnlineUpdate = Date.now(); // Reset the timer start
         storage.savePoints(pointsInfo);
         setPoints(pointsInfo.total);
         triggerPointToast("+10 每日登录奖励");
@@ -126,7 +126,8 @@ export default function Home() {
       intervalId = setInterval(() => {
         const p = storage.getPoints();
         const now = Date.now();
-
+        
+        // If the last update was more than 5 minutes ago, assume they were offline and don't count that gap
         if (now - p.lastOnlineUpdate > 5 * 60000) {
           p.lastOnlineUpdate = now;
           storage.savePoints(p);
@@ -134,11 +135,12 @@ export default function Home() {
         }
 
         const diffMinutes = Math.floor((now - p.lastOnlineUpdate) / 60000);
-
+        
         if (diffMinutes >= 1) {
           p.onlineMinutes += diffMinutes;
           p.lastOnlineUpdate = now;
-
+          
+          // Check if we just crossed the 10 minute threshold
           if (p.onlineMinutes >= 10 && p.onlineMinutes - diffMinutes < 10) {
             p.total += 10;
             p.history.unshift({

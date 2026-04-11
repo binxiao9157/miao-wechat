@@ -23,7 +23,7 @@ class ErrorBoundary extends React.Component<Props, State> {
     return { hasError: true, error };
   }
 
-  public componentDidCatch(error: Error, errorInfo: React.ErrorInfo) {
+  public componentDidCatch(error: Error, errorInfo: ErrorInfo) {
     console.error("Uncaught error:", error, errorInfo);
   }
 
@@ -68,7 +68,7 @@ class ErrorBoundary extends React.Component<Props, State> {
                 <RefreshCw size={20} />
                 重试一下
               </button>
-
+              
               <button
                 onClick={this.handleGoHome}
                 className="w-full py-4 bg-gray-50 text-gray-600 rounded-2xl font-bold flex items-center justify-center gap-2 active:scale-95 transition-transform"
