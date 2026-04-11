@@ -1,0 +1,73 @@
+===================================================================
+ Step 2: 分享深链路由 + 登录回跳
+ 文件: src/App.tsx, src/pages/Login.tsx
+ 改动:
+   - App.tsx: 添加 /join 路由（不包裹 ProtectedRoute）+ lazy import JoinFriend
+   - Login.tsx: 解析 ?returnUrl= 参数，登录成功后优先回跳（校验站内路径）
+===================================================================
+
+diff --git a/src/App.tsx b/src/App.tsx
+index 865b739..9654323 100644
+--- a/src/App.tsx
++++ b/src/App.tsx
+@@ -28,6 +28,7 @@ const EmptyCatPage = lazy(() => import("./pages/EmptyCatPage"));
+ const AccompanyMilestonePage = lazy(() => import("./pages/AccompanyMilestonePage"));
+ const AddFriendQR = lazy(() => import("./pages/AddFriendQR"));
+ const ScanFriend = lazy(() => import("./pages/ScanFriend"));
++const JoinFriend = lazy(() => import("./pages/JoinFriend"));
+ 
+ import { AuthProvider, useAuthContext } from "./context/AuthContext";
+ 
+@@ -101,7 +102,10 @@ function AppRoutes() {
+         <Route path="/switch-companion" element={<ProtectedRoute><SwitchCompanion /></ProtectedRoute>} />
+         <Route path="/add-friend-qr" element={<ProtectedRoute><AddFriendQR /></ProtectedRoute>} />
+         <Route path="/scan-friend" element={<ProtectedRoute><ScanFriend /></ProtectedRoute>} />
+-  
++
++        {/* 分享深链落地页 — 不包裹 ProtectedRoute，未登录用户也需访问 */}
++        <Route path="/join" element={<JoinFriend />} />
++
+         {/* Fallback */}
+         <Route path="*" element={<Navigate to="/login" replace />} />
+       </Routes>
+diff --git a/src/pages/Login.tsx b/src/pages/Login.tsx
+index d1e7166..717bc4a 100644
+--- a/src/pages/Login.tsx
++++ b/src/pages/Login.tsx
+@@ -1,5 +1,5 @@
+ import { useState, useEffect } from "react";
+-import { useNavigate, Link } from "react-router-dom";
++import { useNavigate, Link, useSearchParams } from "react-router-dom";
+ import { useAuthContext } from "../context/AuthContext";
+ import { PawPrint, Eye, EyeOff } from "lucide-react";
+ import { storage } from "../services/storage";
+@@ -7,6 +7,7 @@ import { motion, AnimatePresence } from "motion/react";
+ 
+ export default function Login() {
+   const navigate = useNavigate();
++  const [searchParams] = useSearchParams();
+   const { login } = useAuthContext();
+   const [username, setUsername] = useState("");
+   const [password, setPassword] = useState("");
+@@ -47,11 +48,17 @@ export default function Login() {
+     }
+     const success = login(username, password);
+     if (success) {
+-      const hasCat = storage.getCatList().length > 0;
+-      if (hasCat) {
+-        navigate("/", { replace: true });
++      // 登录后回跳：优先跳转 returnUrl（仅允许站内路径），否则走默认流程
++      const returnUrl = searchParams.get("returnUrl");
++      if (returnUrl && returnUrl.startsWith("/")) {
++        navigate(returnUrl, { replace: true });
+       } else {
+-        navigate("/empty-cat", { replace: true });
++        const hasCat = storage.getCatList().length > 0;
++        if (hasCat) {
++          navigate("/", { replace: true });
++        } else {
++          navigate("/empty-cat", { replace: true });
++        }
+       }
+     } else {
+       setError("用户名或密码错误");
