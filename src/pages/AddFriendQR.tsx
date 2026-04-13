@@ -316,13 +316,11 @@ export default function AddFriendQR() {
       />
 
       <div className="flex-grow flex flex-col items-center justify-evenly px-6 py-2">
-        {/* 名片卡片区 — 外层 motion 负责入场动画，内层 div 供 html2canvas 截图 */}
-        <motion.div
+        {/* 名片卡片区 */}
+        <motion.div 
+          ref={qrCardRef}
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
-        >
-        <div
-          ref={qrCardRef}
           className="bg-white p-6 rounded-[40px] shadow-[0_15px_45px_rgba(0,0,0,0.06)] flex flex-col items-center w-full max-w-[320px] border border-outline-variant/20 relative overflow-hidden"
         >
           <div className="absolute top-0 left-0 w-full h-1.5 bg-gradient-to-r from-primary to-secondary opacity-20"></div>
@@ -380,7 +378,6 @@ export default function AddFriendQR() {
           <p className="text-[10px] text-on-surface-variant font-medium opacity-60 text-center leading-tight">
             让好友打开 Miao 扫描上方二维码<br/>即可建立跨时空的温暖连接
           </p>
-        </div>
         </motion.div>
 
         {/* 底部按钮区 */}

@@ -4,7 +4,7 @@ import { BookOpen, Mail, Home, Star, User } from "lucide-react";
 import { motion } from "motion/react";
 import { useAuthContext } from "../../context/AuthContext";
 
-// 保留 lazy 加载以维持 code-splitting，减小首屏 JS 体积
+// 延迟加载所有页面组件，首屏只加载当前 tab
 const HomePage = lazy(() => import("../../pages/Home"));
 const DiaryPage = lazy(() => import("../../pages/Diary"));
 const TimeLettersPage = lazy(() => import("../../pages/TimeLetters"));
@@ -56,10 +56,10 @@ export default function MainLayout() {
     if (!hasBeenVisited) return null;
 
     return (
-      <motion.div
+      <motion.div 
         key={path}
         initial={false}
-        animate={{
+        animate={{ 
           opacity: isActive ? 1 : 0,
           zIndex: isActive ? 10 : -10,
           scale: isActive ? 1 : 0.98
@@ -68,9 +68,9 @@ export default function MainLayout() {
         className={`fixed inset-0 ${isActive ? '' : 'pointer-events-none'}`}
       >
         <div className="w-full h-full overflow-y-auto no-scrollbar bg-background">
-          <div
+          <div 
             className="min-h-full flex flex-col"
-            style={{
+            style={{ 
               paddingBottom: 'calc(env(safe-area-inset-bottom) + 5rem)',
               paddingLeft: 'env(safe-area-inset-left)',
               paddingRight: 'env(safe-area-inset-right)'

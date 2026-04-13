@@ -1,3 +1,5 @@
+import { mediaStorage } from "./mediaStorage";
+
 /**
  * 本地存储服务，模拟移动端的 SharedPreferences/MMKV
  */
@@ -46,6 +48,7 @@ export interface Comment {
 
 export interface DiaryEntry {
   id: string;
+  catId: string; // 所属猫咪 ID
   content: string;
   media?: string;
   mediaType?: 'image' | 'video';
@@ -210,9 +213,10 @@ const getUserKey = (key: string) => {
 
 export const storage = {
   // Helper for safe localStorage access
-  setItem: (key: string, value: string) => {
+  setItem: (key: string, value: string): boolean => {
     try {
       localStorage.setItem(key, value);
+      return true;
     } catch (e) {
       console.error(`Error setting storage key "${key}":`, e);
       if (e instanceof DOMException && e.name === 'QuotaExceededError') {
@@ -223,10 +227,13 @@ export const storage = {
           // Retry after pruning
           localStorage.setItem(key, value);
           console.log(`Retry setting storage key "${key}" succeeded after pruning.`);
+          return true;
         } catch (retryError) {
           console.error(`Retry setting storage key "${key}" failed even after pruning:`, retryError);
+          return false;
         }
       }
+      return false;
     }
   },
 
@@ -245,17 +252,11 @@ export const storage = {
             const data = localStorage.getItem(key);
             if (data) {
               const diaries = JSON.parse(data) as DiaryEntry[];
-              let pruned = false;
-              const cleanedDiaries = diaries.map((d, index) => {
-                if (d.media && index >= 1) { // Keep media for only the most recent entry
-                  pruned = true;
-                  return { ...d, media: undefined, mediaType: undefined };
-                }
-                return d;
-              });
-              if (pruned) {
-                localStorage.setItem(key, JSON.stringify(cleanedDiaries));
-                console.log(`Pruned diary media for key ${key} to free space.`);
+              const cleanedDiaries = diaries; // 不再暴力删除旧日记的媒体字段
+              if (diaries.length > 10) {
+                const trimmed = diaries.slice(0, 10);
+                localStorage.setItem(key, JSON.stringify(trimmed));
+                console.log(`Pruned diaries for key ${key} to free space.`);
               }
             }
           } catch (e) {
@@ -475,6 +476,10 @@ export const storage = {
 
   setActiveCatId: (id: string) => {
     storage.setItem(getUserKey(USER_DATA_KEYS.ACTIVE_CAT_ID), id);
+    // 触发自定义事件通知 UI 更新
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('active-cat-changed', { detail: { catId: id } }));
+    }
   },
 
   getActiveCat: (): CatInfo | null => {
@@ -613,15 +618,18 @@ export const storage = {
     return storage.safeParse<DiaryEntry[]>(getUserKey(USER_DATA_KEYS.DIARIES), []);
   },
 
-  saveDiaries: (diaries: DiaryEntry[]) => {
+  saveDiaries: (diaries: DiaryEntry[]): boolean => {
     // 滑动窗口：只保留最近 MAX_DIARIES 条，按时间倒序（新在前）
     const trimmed = diaries.length > MAX_DIARIES ? diaries.slice(0, MAX_DIARIES) : diaries;
-    storage.setItem(getUserKey(USER_DATA_KEYS.DIARIES), JSON.stringify(trimmed));
-    return trimmed;
+    return storage.setItem(getUserKey(USER_DATA_KEYS.DIARIES), JSON.stringify(trimmed));
   },
 
   deleteDiary: (id: string) => {
     const diaries = storage.getDiaries();
+    const diary = diaries.find(d => d.id === id);
+    if (diary?.media?.startsWith('indexeddb:')) {
+      mediaStorage.deleteMedia(id);
+    }
     const updated = diaries.filter(d => d.id !== id);
     storage.saveDiaries(updated);
     return updated;
@@ -689,6 +697,7 @@ export const storage = {
       const mockDiaries: FriendDiaryEntry[] = [
         {
           id: `fdiary_${friend.id}_1`,
+          catId: `cat_${friend.id}`,
           authorId: friend.id,
           authorNickname: friend.nickname,
           authorAvatar: friend.avatar,
@@ -703,6 +712,7 @@ export const storage = {
         },
         {
           id: `fdiary_${friend.id}_2`,
+          catId: `cat_${friend.id}`,
           authorId: friend.id,
           authorNickname: friend.nickname,
           authorAvatar: friend.avatar,
@@ -717,6 +727,7 @@ export const storage = {
         },
         {
           id: `fdiary_${friend.id}_3`,
+          catId: `cat_${friend.id}`,
           authorId: friend.id,
           authorNickname: friend.nickname,
           authorAvatar: friend.avatar,
