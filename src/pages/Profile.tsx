@@ -1,5 +1,6 @@
 import { useNavigate } from "react-router-dom";
-import { Settings, ChevronRight, LogOut, Shield, Bell, FileText, Lock, User as UserIcon, Heart, Calendar, Image as ImageIcon, Camera, Trash2, PawPrint, QrCode, ScanQrCode } from "lucide-react";
+import { Settings, ChevronRight, LogOut, Shield, Bell, FileText, Lock, User as UserIcon, Heart, Calendar, Image as ImageIcon, Camera, Trash2, QrCode, ScanQrCode } from "lucide-react";
+import PawIcon from "../components/PawIcon";
 import { useAuthContext } from "../context/AuthContext";
 import { storage, CatInfo } from "../services/storage";
 import { useState, useEffect } from "react";
@@ -14,27 +15,53 @@ export default function Profile() {
   const [activeCat, setActiveCat] = useState<CatInfo | null>(null);
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [clickCount, setClickCount] = useState(0);
+  const [showAdmin, setShowAdmin] = useState(false);
 
   useEffect(() => {
-    // 缩短延迟，平衡动画流畅度与加载速度
-    const timer = setTimeout(() => {
-      const diaries = storage.getDiaries();
+    const loadStats = () => {
       const cat = storage.getActiveCat();
       setActiveCat(cat);
+
+      if (!cat) {
+        setStats({ days: 0, entries: 0 });
+        return;
+      }
+
+      // 1. 计算陪伴天数 (专属)
+      const diaries = storage.getDiaries();
+      const catDiaries = diaries.filter(d => d.catId === cat.id);
       
-      const firstDiary = diaries.length > 0 ? diaries[diaries.length - 1] : null;
-      const firstCreatedAt = firstDiary?.createdAt ? new Date(firstDiary.createdAt).getTime() : NaN;
-      const days = (!isNaN(firstCreatedAt) && firstCreatedAt > 0)
-        ? Math.max(1, Math.ceil((Date.now() - firstCreatedAt) / (1000 * 60 * 60 * 24)))
+      // 优先级：cat.createdAt > 第一条日记时间 > 1天
+      let startTime = cat.createdAt;
+      if (!startTime && catDiaries.length > 0) {
+        // 兜底：取该猫咪最早的一条日记时间
+        startTime = Math.min(...catDiaries.map(d => d.createdAt));
+      }
+
+      const days = startTime
+        ? Math.max(1, Math.ceil((Date.now() - startTime) / (1000 * 60 * 60 * 24)))
         : 1;
 
+      // 2. 计算记录瞬间 (专属)
       setStats({
         days,
-        entries: diaries.length
+        entries: catDiaries.length
       });
-    }, 50);
+    };
 
-    return () => clearTimeout(timer);
+    loadStats();
+
+    // 监听活跃猫咪切换、猫咪更新以及日记更新事件，实现实时同步
+    window.addEventListener('active-cat-changed', loadStats);
+    window.addEventListener('cat-updated', loadStats);
+    window.addEventListener('diary-updated', loadStats);
+    
+    return () => {
+      window.removeEventListener('active-cat-changed', loadStats);
+      window.removeEventListener('cat-updated', loadStats);
+      window.removeEventListener('diary-updated', loadStats);
+    };
   }, []);
 
   const handleLogout = () => {
@@ -257,15 +284,38 @@ export default function Profile() {
         )}
       </AnimatePresence>
 
-      <footer className="mt-12 text-center">
-        <p className="text-[10px] font-bold text-on-surface-variant opacity-30 uppercase tracking-widest">Miao Version 1.0.0</p>
+      <footer className="mt-12 text-center pb-10">
+        <p 
+          onClick={() => {
+            setClickCount(prev => {
+              const next = prev + 1;
+              if (next >= 5) {
+                setShowAdmin(true);
+                return 0;
+              }
+              return next;
+            });
+          }}
+          className="text-[10px] font-bold text-on-surface-variant opacity-30 uppercase tracking-widest cursor-pointer select-none"
+        >
+          Miao Version 1.0.0
+        </p>
         <div className="flex justify-center gap-1 mt-1">
           <Heart size={8} className="text-primary fill-current" />
           <Heart size={8} className="text-secondary fill-current" />
           <Heart size={8} className="text-primary fill-current" />
         </div>
       </footer>
+
+      {/* Admin Panel Modal */}
+      <AnimatePresence>
+        {showAdmin && (
+          <AdminPresetConfig onClose={() => setShowAdmin(false)} />
+        )}
+      </AnimatePresence>
       </div>
     </div>
   );
 }
+
+import AdminPresetConfig from "../components/AdminPresetConfig";

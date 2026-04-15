@@ -1,0 +1,181 @@
+diff --git a/src/pages/Diary.tsx b/src/pages/Diary.tsx
+index b7daf82..16c59df 100644
+--- a/src/pages/Diary.tsx
++++ b/src/pages/Diary.tsx
+@@ -141,10 +141,13 @@ export default function Diary() {
+           reader.readAsDataURL(selectedMedia.file!);
+         });
+         
+-        // 存入 IndexedDB
+-        await mediaStorage.saveMedia(diaryId, base64);
+-        // localStorage 中只存一个标记，实际展示时从 IndexedDB 取
+-        mediaUrl = `indexeddb:${diaryId}`;
++        // 存入 IndexedDB，失败时降级为 inline base64（兼容隐私模式）
++        try {
++          await mediaStorage.saveMedia(diaryId, base64);
++          mediaUrl = `indexeddb:${diaryId}`;
++        } catch {
++          mediaUrl = base64;
++        }
+       }
+ 
+       const newEntry: DiaryEntry = {
+diff --git a/src/pages/GenerationProgress.tsx b/src/pages/GenerationProgress.tsx
+index 5d3347c..be18e79 100644
+--- a/src/pages/GenerationProgress.tsx
++++ b/src/pages/GenerationProgress.tsx
+@@ -74,8 +74,10 @@ export default function GenerationProgress() {
+         setStatus("正在优化图像数据...");
+         try {
+           optimizedImg = await new Promise((resolve, reject) => {
++            if (abortSignal.aborted) { resolve(img); return; }
+             const image = new Image();
+             image.onload = () => {
++              if (abortSignal.aborted) { resolve(img); return; }
+               const canvas = document.createElement('canvas');
+               const maxSide = 1280;
+               let width = image.width;
+@@ -145,7 +147,9 @@ export default function GenerationProgress() {
+         }
+       );
+       
+-      // 立即设置为活跃 ID
++      // 校验入库成功后再激活
++      const saved = storage.getCatById(newCatId);
++      if (!saved) throw new Error('猫咪数据保存失败');
+       storage.setActiveCatId(newCatId);
+       refreshCatStatus();
+ 
+@@ -183,17 +187,17 @@ export default function GenerationProgress() {
+       );
+       const taskResults = await Promise.all(tasks);
+       
+-      const videoUrls: { [key: string]: string } = {};
+-      const pollPromises = taskResults.map((task, index) => 
++      const pollPromises = taskResults.map((task, index) =>
+         VolcanoService.pollTaskResult(task.id).then(url => {
+-          videoUrls[secondaryActions[index]] = url;
+-          // 安全写入：每次获取到一个新 URL 时，重新读出并合并，防止属性覆盖
+           FileManager.updateCatVideos(newCatId, { [secondaryActions[index]]: url }, true);
+         })
+       );
+ 
+-      await Promise.all(pollPromises);
+-      // 取消解锁标记
++      const results = await Promise.allSettled(pollPromises);
++      results.forEach((r, i) => {
++        if (r.status === 'rejected') console.error(`动作 ${secondaryActions[i]} 生成失败:`, r.reason);
++      });
++      // 无论部分成功还是全部失败，清除解锁标记
+       await FileManager.updateCatVideos(newCatId, {}, false);
+     } catch (e) {
+       console.error("后台生成任务失败:", e);
+@@ -303,9 +307,9 @@ export default function GenerationProgress() {
+ 
+     return () => {
+       abortController.abort();
+-      // 同时中止 I2V 阶段的任务
+       if (i2vAbortRef.current) {
+         i2vAbortRef.current.abort();
++        i2vAbortRef.current = null;
+       }
+     };
+   // eslint-disable-next-line react-hooks/exhaustive-deps
+diff --git a/src/services/fileManager.ts b/src/services/fileManager.ts
+index c175bb8..6a93172 100644
+--- a/src/services/fileManager.ts
++++ b/src/services/fileManager.ts
+@@ -1,5 +1,32 @@
+ import { storage, CatInfo } from './storage';
+ 
++/**
++ * 压缩 base64 图片为缩略图，降低 localStorage 占用
++ * 非 base64 数据（URL 等）原样返回
++ */
++function compressForStorage(base64: string | undefined, maxSize: number, quality: number): Promise<string | undefined> {
++  if (!base64 || !base64.startsWith('data:image')) return Promise.resolve(base64);
++  return new Promise((resolve) => {
++    const img = new Image();
++    img.onload = () => {
++      const canvas = document.createElement('canvas');
++      let w = img.width, h = img.height;
++      if (w > maxSize || h > maxSize) {
++        const ratio = Math.min(maxSize / w, maxSize / h);
++        w = Math.round(w * ratio);
++        h = Math.round(h * ratio);
++      }
++      canvas.width = w;
++      canvas.height = h;
++      const ctx = canvas.getContext('2d');
++      ctx?.drawImage(img, 0, 0, w, h);
++      resolve(canvas.toDataURL('image/jpeg', quality));
++    };
++    img.onerror = () => resolve(base64);
++    img.src = base64;
++  });
++}
++
+ /**
+  * 文件管理服务 (模拟 Flutter 的 path_provider 和 dart:io)
+  * 在 Web 环境下，我们使用 Blob URL 和 localStorage 来模拟本地存储
+@@ -26,7 +53,13 @@ export class FileManager {
+       finalPaths[action] = url;
+     }
+ 
+-    // 3. 记录元数据到本地数据库
++    // 压缩大图为缩略图再入库，防止 localStorage 爆容量
++    const [compressedPlaceholder, compressedAnchor] = await Promise.all([
++      compressForStorage(metadata?.placeholderImage, 200, 0.5),
++      compressForStorage(metadata?.anchorFrame, 600, 0.7),
++    ]);
++
++    // 记录元数据到本地数据库
+     const newCat: CatInfo = {
+       id: groupId,
+       name: catName,
+@@ -34,11 +67,11 @@ export class FileManager {
+       color: metadata?.furColor || '未知',
+       avatar: avatarUrl,
+       source: metadata?.source === 'created' ? 'created' : 'uploaded',
+-      videoPath: finalPaths.idle || finalPaths.petting || Object.values(finalPaths)[0], 
++      videoPath: finalPaths.idle || finalPaths.petting || Object.values(finalPaths)[0],
+       videoPaths: finalPaths,
+       remoteVideoUrl: finalPaths.idle || finalPaths.petting || Object.values(finalPaths)[0],
+-      placeholderImage: metadata?.placeholderImage,
+-      anchorFrame: metadata?.anchorFrame,
++      placeholderImage: compressedPlaceholder,
++      anchorFrame: compressedAnchor,
+     };
+ 
+     storage.saveCatInfo(newCat);
+diff --git a/src/services/volcanoService.ts b/src/services/volcanoService.ts
+index 635c8a7..c9fd0bb 100644
+--- a/src/services/volcanoService.ts
++++ b/src/services/volcanoService.ts
+@@ -4,7 +4,7 @@ import axios from 'axios';
+  * 火山引擎配置中心 (方舟 Ark 平台)
+  */
+ export const VolcanoConfig = {
+-  MOCK_MODE: false,
++  get MOCK_MODE() { return import.meta.env.DEV && localStorage.getItem('VOLC_MOCK_MODE') === 'true'; },
+   get ModelId() {
+     return localStorage.getItem('VOLC_MODEL_ID') || import.meta.env.VITE_VOLC_MODEL_ID || "doubao-seedance-1-5-pro-251215";
+   },
+diff --git a/vite.config.ts b/vite.config.ts
+index 9bc4e0a..7b033cd 100644
+--- a/vite.config.ts
++++ b/vite.config.ts
+@@ -3,9 +3,12 @@ import react from '@vitejs/plugin-react';
+ import path from 'path';
+ import {defineConfig} from 'vite';
+ 
+-export default defineConfig(() => {
++export default defineConfig(({ mode }) => {
+   return {
+     plugins: [react(), tailwindcss()],
++    esbuild: {
++      drop: mode === 'production' ? ['console', 'debugger'] : [],
++    },
+     // Gemini API Key 已移至服务端，不再注入客户端包
+     resolve: {
+       alias: {

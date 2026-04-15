@@ -18,6 +18,7 @@ export interface CatInfo {
   color: string;
   avatar: string;
   source: 'created' | 'uploaded';
+  createdAt?: number; // 新增：猫咪创建/领养时间戳
   videoPath?: string; // 默认视频路径 (Idle/Petting)
   videoPaths?: {
     idle?: string;
@@ -67,6 +68,8 @@ export interface FriendDiaryEntry extends DiaryEntry {
 
 export interface TimeLetter {
   id: string;
+  catId: string; // 关联的猫咪 ID
+  catAvatar: string; // 猫咪头像缩略图 (冗余存储)
   title?: string; // 新增标题字段，可选以兼容旧数据
   content: string;
   unlockAt: number;
@@ -100,6 +103,12 @@ export interface PointsInfo {
   history: PointTransaction[];
 }
 
+export interface PresetCat {
+  id: string;
+  name: string;
+  imageUrl: string;
+}
+
 const STORAGE_KEYS = {
   USERS: 'miao_users', // 所有用户信息
   CURRENT_USER: 'miao_current_user', // 当前登录用户
@@ -108,7 +117,16 @@ const STORAGE_KEYS = {
   LAST_CAT_IMAGE: 'miao_last_cat_image', // 全局最后一次使用的猫咪图片
   LAST_CAT_BREED: 'miao_last_cat_breed', // 全局最后一次使用的猫咪品种
   LAST_USERNAME: 'miao_last_username', // 记住上次登录的用户名
+  APP_PRESET_CATS: 'app_preset_cats', // 预设猫咪底图
 };
+
+const DEFAULT_PRESET_CATS: PresetCat[] = [
+  { id: 'british_shorthair', name: '英国短毛猫', imageUrl: 'https://picsum.photos/seed/british_shorthair/800/800' },
+  { id: 'ragdoll', name: '布偶猫', imageUrl: 'https://picsum.photos/seed/ragdoll/800/800' },
+  { id: 'persian', name: '波斯猫', imageUrl: 'https://picsum.photos/seed/persian/800/800' },
+  { id: 'maine_coon', name: '缅因猫', imageUrl: 'https://picsum.photos/seed/maine_coon/800/800' },
+  { id: 'siamese', name: '暹罗猫', imageUrl: 'https://picsum.photos/seed/siamese/800/800' },
+];
 
 const USER_DATA_KEYS = {
   CAT_LIST: 'miao_cat_list',
@@ -621,7 +639,13 @@ export const storage = {
   saveDiaries: (diaries: DiaryEntry[]): boolean => {
     // 滑动窗口：只保留最近 MAX_DIARIES 条，按时间倒序（新在前）
     const trimmed = diaries.length > MAX_DIARIES ? diaries.slice(0, MAX_DIARIES) : diaries;
-    return storage.setItem(getUserKey(USER_DATA_KEYS.DIARIES), JSON.stringify(trimmed));
+    const success = storage.setItem(getUserKey(USER_DATA_KEYS.DIARIES), JSON.stringify(trimmed));
+    
+    if (success && typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('diary-updated'));
+    }
+    
+    return success;
   },
 
   deleteDiary: (id: string) => {
@@ -653,6 +677,13 @@ export const storage = {
   saveTimeLetters: (letters: TimeLetter[]) => {
     const trimmed = letters.length > MAX_TIME_LETTERS ? letters.slice(0, MAX_TIME_LETTERS) : letters;
     storage.setItem(getUserKey(USER_DATA_KEYS.TIME_LETTERS), JSON.stringify(trimmed));
+  },
+
+  deleteTimeLetter: (id: string): TimeLetter[] => {
+    const letters = storage.getTimeLetters();
+    const updated = letters.filter(l => l.id !== id);
+    storage.saveTimeLetters(updated);
+    return updated;
   },
 
   clearMediaCache: () => {
@@ -756,5 +787,14 @@ export const storage = {
   saveFriendDiaries: (diaries: FriendDiaryEntry[]) => {
     const trimmed = diaries.length > MAX_FRIEND_DIARIES ? diaries.slice(0, MAX_FRIEND_DIARIES) : diaries;
     storage.setItem(getUserKey(USER_DATA_KEYS.FRIEND_DIARIES), JSON.stringify(trimmed));
+  },
+
+  // Preset Cats Management
+  getPresetCats: (): PresetCat[] => {
+    return storage.safeParse<PresetCat[]>(STORAGE_KEYS.APP_PRESET_CATS, DEFAULT_PRESET_CATS);
+  },
+
+  savePresetCats: (presets: PresetCat[]) => {
+    storage.setItem(STORAGE_KEYS.APP_PRESET_CATS, JSON.stringify(presets));
   },
 };
