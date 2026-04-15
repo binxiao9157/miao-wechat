@@ -1,0 +1,87 @@
+diff --git a/.env.example b/.env.example
+index f35fc67..a937f38 100644
+--- a/.env.example
++++ b/.env.example
+@@ -1,17 +1,15 @@
+-# GEMINI_API_KEY: Required for Gemini AI API calls.
+-# AI Studio automatically injects this at runtime from user secrets.
+-# Users configure this via the Secrets panel in the AI Studio UI.
++# ===== Gemini（可选）=====
+ GEMINI_API_KEY="MY_GEMINI_API_KEY"
+ 
+-# APP_URL: The URL where this applet is hosted.
+-# AI Studio automatically injects this at runtime with the Cloud Run service URL.
+-# Used for self-referential links, OAuth callbacks, and API endpoints.
+-APP_URL="MY_APP_URL"
++# ===== 应用 URL =====
++APP_URL="https://www.mmdd10.tech"
+ 
+-# Volcengine Ark API Keys (v3)
+-VITE_VOLC_ACCESS_KEY="YOUR_VOLC_ACCESS_KEY_HERE"
+-VITE_VOLC_SECRET_KEY="YOUR_VOLC_SECRET_KEY_HERE"
+-VITE_VOLC_API_KEY="YOUR_VOLC_API_KEY_HERE"
+-VITE_VOLC_MODEL_ID="doubao-seedance-1-5-pro-251215"
+-VITE_VOLC_ENDPOINT="https://ark.cn-beijing.volces.com/api/v3/contents/generations/tasks"
+-VITE_VOLC_T2I_MODEL_ID="doubao-t2i-v2"
++# ===== 火山引擎 Ark API（服务端专用，不带 VITE_ 前缀）=====
++# 重要：不要使用 VITE_ 前缀！带 VITE_ 前缀的变量会被 Vite 编译到
++# 前端 JS 中，导致 API Key 暴露给所有用户。
++VOLC_API_KEY="YOUR_VOLC_API_KEY_HERE"
++VOLC_ACCESS_KEY="YOUR_VOLC_ACCESS_KEY_HERE"
++VOLC_SECRET_KEY="YOUR_VOLC_SECRET_KEY_HERE"
++VOLC_MODEL_ID="doubao-seedance-1-5-pro-251215"
++VOLC_T2I_MODEL_ID="doubao-t2i-v2"
++VOLC_ENDPOINT="https://ark.cn-beijing.volces.com/api/v3/contents/generations/tasks"
+diff --git a/index.html b/index.html
+index 371abcc..cd5ea94 100644
+--- a/index.html
++++ b/index.html
+@@ -23,7 +23,7 @@
+     <meta property="og:title" content="Miao - 记录与猫咪的每一个瞬间" />
+     <meta property="og:description" content="开启您与猫咪的数字治愈之旅" />
+     <meta property="og:image" content="/og-image.jpg" />
+-    <meta property="og:url" content="https://miao-diary.app" />
++    <meta property="og:url" content="https://www.mmdd10.tech" />
+     <link rel="image_src" href="/og-image.jpg" />
+     <meta name="twitter:image" content="/og-image.jpg" />
+     <meta name="thumbnail" content="/og-image.jpg" />
+diff --git a/server.ts b/server.ts
+index 7a33a55..67b586d 100644
+--- a/server.ts
++++ b/server.ts
+@@ -30,12 +30,12 @@ async function startServer() {
+     });
+   });
+ 
+-  const ARK_API_KEY = (process.env.VITE_VOLC_API_KEY || "").trim();
+-  const ARK_MODEL_ID = (process.env.VITE_VOLC_MODEL_ID || "doubao-seedance-1-5-pro-251215").trim();
+-  const ARK_T2I_MODEL_ID = (process.env.VITE_VOLC_T2I_MODEL_ID || "doubao-t2i-v2").trim();
+-  
++  const ARK_API_KEY = (process.env.VOLC_API_KEY || process.env.VITE_VOLC_API_KEY || "").trim();
++  const ARK_MODEL_ID = (process.env.VOLC_MODEL_ID || process.env.VITE_VOLC_MODEL_ID || "doubao-seedance-1-5-pro-251215").trim();
++  const ARK_T2I_MODEL_ID = (process.env.VOLC_T2I_MODEL_ID || process.env.VITE_VOLC_T2I_MODEL_ID || "doubao-t2i-v2").trim();
++
+   // 确保 ARK_BASE_URL 是一个有效的绝对 URL，且移除末尾斜杠
+-  let ARK_BASE_URL = (process.env.VITE_VOLC_ENDPOINT || "https://ark.cn-beijing.volces.com/api/v3/contents/generations/tasks").trim().replace(/\/$/, '');
++  let ARK_BASE_URL = (process.env.VOLC_ENDPOINT || process.env.VITE_VOLC_ENDPOINT || "https://ark.cn-beijing.volces.com/api/v3/contents/generations/tasks").trim().replace(/\/$/, '');
+   if (!ARK_BASE_URL.startsWith('http')) {
+     console.warn(`[Server] Warning: ARK_BASE_URL "${ARK_BASE_URL}" is not a valid URL. Falling back to default.`);
+     ARK_BASE_URL = "https://ark.cn-beijing.volces.com/api/v3/contents/generations/tasks";
+@@ -243,7 +243,7 @@ async function startServer() {
+ 
+     try {
+       if (!ARK_API_KEY) {
+-        console.error("Missing VITE_VOLC_API_KEY environment variable");
++        console.error("Missing VOLC_API_KEY environment variable");
+         return res.status(500).json({ error: "服务器未配置 API Key，请检查环境变量" });
+       }
+ 
+@@ -441,7 +441,7 @@ async function startServer() {
+ 
+       // Forward headers
+       res.setHeader('Content-Type', response.headers['content-type'] || 'video/mp4');
+-      res.setHeader('Access-Control-Allow-Origin', '*');
++      res.setHeader('Access-Control-Allow-Origin', 'https://www.mmdd10.tech');
+       
+       response.data.pipe(res);
+     } catch (error: any) {

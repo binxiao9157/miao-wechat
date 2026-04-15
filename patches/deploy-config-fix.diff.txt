@@ -1,0 +1,187 @@
+==============================================================================
+Miao PWA 腾讯云部署配置修复 — Diff 备份
+日期: 2026-04-15
+目标域名: https://www.mmdd10.tech
+==============================================================================
+
+共 4 处修改，涉及 3 个文件：server.ts、index.html、.env.example
+
+==============================================================================
+修改 1/4：server.ts — 环境变量名从 VITE_ 前缀改为不带前缀
+==============================================================================
+
+【问题分析】
+
+server.ts 第 33-38 行，读取环境变量时使用的是 VITE_ 前缀：
+
+    const ARK_API_KEY = (process.env.VITE_VOLC_API_KEY || "").trim();
+    const ARK_MODEL_ID = (process.env.VITE_VOLC_MODEL_ID || "...").trim();
+    const ARK_T2I_MODEL_ID = (process.env.VITE_VOLC_T2I_MODEL_ID || "...").trim();
+    let ARK_BASE_URL = (process.env.VITE_VOLC_ENDPOINT || "...").trim();
+
+而服务器上的 .env 文件配置的是不带 VITE_ 前缀的变量：
+
+    VOLC_API_KEY=xxx
+    VOLC_MODEL_ID=xxx
+
+这导致 server.ts 实际读取到的是空值（因为 VITE_VOLC_API_KEY 不存在），
+然后所有 API 调用都会报"服务器未配置 API Key"。
+
+同时，第 29 行健康检查用的是 process.env.VOLC_API_KEY（不带 VITE_），
+而第 33 行实际使用的是 process.env.VITE_VOLC_API_KEY，两处不一致。
+
+此外，第 246 行错误日志也需要同步更新变量名。
+
+【安全原因】
+
+Vite 的设计规则：所有以 VITE_ 开头的环境变量会被编译到前端 JS bundle 中，
+通过 import.meta.env.VITE_xxx 在浏览器中可直接访问。
+
+如果 .env 中使用 VITE_VOLC_API_KEY=真实密钥，那么 npm run build 之后，
+任何人打开 DevTools → Sources 搜索就能找到你的 API Key。
+
+去掉 VITE_ 前缀后，变量只存在于 Node.js 进程中（process.env），
+前端代码完全无法访问，API Key 安全。
+
+--- a/server.ts
++++ b/server.ts
+@@ -33,6 +33,6 @@
+-  const ARK_API_KEY = (process.env.VITE_VOLC_API_KEY || "").trim();
+-  const ARK_MODEL_ID = (process.env.VITE_VOLC_MODEL_ID || "doubao-seedance-1-5-pro-251215").trim();
+-  const ARK_T2I_MODEL_ID = (process.env.VITE_VOLC_T2I_MODEL_ID || "doubao-t2i-v2").trim();
++  const ARK_API_KEY = (process.env.VOLC_API_KEY || process.env.VITE_VOLC_API_KEY || "").trim();
++  const ARK_MODEL_ID = (process.env.VOLC_MODEL_ID || process.env.VITE_VOLC_MODEL_ID || "doubao-seedance-1-5-pro-251215").trim();
++  const ARK_T2I_MODEL_ID = (process.env.VOLC_T2I_MODEL_ID || process.env.VITE_VOLC_T2I_MODEL_ID || "doubao-t2i-v2").trim();
+
+@@ -38,1 +38,1 @@
+-  let ARK_BASE_URL = (process.env.VITE_VOLC_ENDPOINT || "https://ark.cn-beijing.volces.com/api/v3/contents/generations/tasks").trim().replace(/\/$/, '');
++  let ARK_BASE_URL = (process.env.VOLC_ENDPOINT || process.env.VITE_VOLC_ENDPOINT || "https://ark.cn-beijing.volces.com/api/v3/contents/generations/tasks").trim().replace(/\/$/, '');
+
+@@ -246,1 +246,1 @@
+-        console.error("Missing VITE_VOLC_API_KEY environment variable");
++        console.error("Missing VOLC_API_KEY environment variable");
+
+【说明】
+
+采用 VOLC_ || VITE_VOLC_ 的 fallback 方式，兼容两种命名：
+- 生产环境（服务器）：读取 VOLC_API_KEY（推荐，不暴露到前端）
+- 开发环境（本地）：如果只配了 VITE_VOLC_API_KEY 也能正常工作
+这样不会破坏现有的本地开发流程。
+
+
+==============================================================================
+修改 2/4：index.html — og:url 更新为实际域名
+==============================================================================
+
+【问题分析】
+
+index.html 第 26 行：
+
+    <meta property="og:url" content="https://miao-diary.app" />
+
+og:url 是 Open Graph 协议的标准字段，当用户在微信、QQ、微博、Twitter、
+Facebook 等平台分享链接时，爬虫会读取这个 meta 标签来显示分享卡片。
+
+当前值 https://miao-diary.app 是旧域名/占位域名，实际不可访问。
+用户分享时，社交平台会显示指向错误域名的链接，点击后打不开。
+
+--- a/index.html
++++ b/index.html
+@@ -26,1 +26,1 @@
+-    <meta property="og:url" content="https://miao-diary.app" />
++    <meta property="og:url" content="https://www.mmdd10.tech" />
+
+
+==============================================================================
+修改 3/4：server.ts — CORS 限制为指定域名
+==============================================================================
+
+【问题分析】
+
+server.ts 第 444 行，/api/proxy-video 接口的 CORS 设置：
+
+    res.setHeader('Access-Control-Allow-Origin', '*');
+
+这个接口的作用是代理外部视频 URL（火山引擎生成的视频下载链接），
+绕过浏览器的跨域限制，让前端能获取视频内容用于帧提取和播放。
+
+设置为 '*' 表示任何网站都可以调用这个代理接口。理论上，
+恶意网站可以利用你的服务器作为代理中转，消耗你的带宽和流量。
+
+虽然风险不算高（因为只代理视频 URL，不涉及鉴权），但限制到自己的域名
+是最佳实践，不额外增加成本。
+
+--- a/server.ts
++++ b/server.ts
+@@ -444,1 +444,1 @@
+-      res.setHeader('Access-Control-Allow-Origin', '*');
++      res.setHeader('Access-Control-Allow-Origin', 'https://www.mmdd10.tech');
+
+
+==============================================================================
+修改 4/4：.env.example — 更新变量命名规范
+==============================================================================
+
+【问题分析】
+
+.env.example 是新开发者或运维人员的配置参考模板。
+当前文件中所有火山引擎变量都使用 VITE_ 前缀：
+
+    VITE_VOLC_ACCESS_KEY="YOUR_VOLC_ACCESS_KEY_HERE"
+    VITE_VOLC_SECRET_KEY="YOUR_VOLC_SECRET_KEY_HERE"
+    VITE_VOLC_API_KEY="YOUR_VOLC_API_KEY_HERE"
+    ...
+
+如果新同事照抄这个模板配置生产服务器，密钥会通过 Vite 编译泄露到前端。
+更新为不带 VITE_ 前缀的版本，从模板层面杜绝误配。
+
+同时 APP_URL 应更新为实际域名，方便参考。
+
+--- a/.env.example
++++ b/.env.example
+@@ -1,18 +1,25 @@
+-# GEMINI_API_KEY: Required for Gemini AI API calls.
+-# AI Studio automatically injects this at runtime from user secrets.
+-# Users configure this via the Secrets panel in the AI Studio UI.
++# ===== Gemini（可选）=====
+ GEMINI_API_KEY="MY_GEMINI_API_KEY"
+
+-# APP_URL: The URL where this applet is hosted.
+-# AI Studio automatically injects this at runtime with the Cloud Run service URL.
+-# Used for self-referential links, OAuth callbacks, and API endpoints.
+-APP_URL="MY_APP_URL"
++# ===== 应用 URL =====
++APP_URL="https://www.mmdd10.tech"
+
+-# Volcengine Ark API Keys (v3)
+-VITE_VOLC_ACCESS_KEY="YOUR_VOLC_ACCESS_KEY_HERE"
+-VITE_VOLC_SECRET_KEY="YOUR_VOLC_SECRET_KEY_HERE"
+-VITE_VOLC_API_KEY="YOUR_VOLC_API_KEY_HERE"
+-VITE_VOLC_MODEL_ID="doubao-seedance-1-5-pro-251215"
+-VITE_VOLC_ENDPOINT="https://ark.cn-beijing.volces.com/api/v3/contents/generations/tasks"
+-VITE_VOLC_T2I_MODEL_ID="doubao-t2i-v2"
++# ===== 火山引擎 Ark API（服务端专用，不带 VITE_ 前缀）=====
++# 重要：不要使用 VITE_ 前缀！带 VITE_ 前缀的变量会被 Vite 编译到
++# 前端 JS 中，导致 API Key 暴露给所有用户。
++VOLC_API_KEY="YOUR_VOLC_API_KEY_HERE"
++VOLC_ACCESS_KEY="YOUR_VOLC_ACCESS_KEY_HERE"
++VOLC_SECRET_KEY="YOUR_VOLC_SECRET_KEY_HERE"
++VOLC_MODEL_ID="doubao-seedance-1-5-pro-251215"
++VOLC_T2I_MODEL_ID="doubao-t2i-v2"
++VOLC_ENDPOINT="https://ark.cn-beijing.volces.com/api/v3/contents/generations/tasks"
+
+
+==============================================================================
+修改汇总
+==============================================================================
+
+| # | 文件           | 行号     | 修改类型 | 严重程度 | 说明                              |
+|---|---------------|----------|----------|----------|-----------------------------------|
+| 1 | server.ts     | 33-38    | 改变量名 | CRITICAL | 优先读 VOLC_，fallback 到 VITE_   |
+| 2 | index.html    | 26       | 改域名   | HIGH     | og:url 改为 www.mmdd10.tech       |
+| 3 | server.ts     | 444      | 限制CORS | MEDIUM   | 通配符 * 改为指定域名              |
+| 4 | .env.example  | 全文     | 改模板   | MEDIUM   | 去 VITE_ 前缀 + 加安全注释        |
+
+修改后需要重新构建并推送到服务器：
+  本地: npm run build → git push
+  服务器: sudo su - miao && cd ~/app && ./deploy.sh
