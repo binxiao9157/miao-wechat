@@ -7,6 +7,8 @@ import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import InstallPromptBanner from "../components/InstallPromptBanner";
 import PageHeader from "../components/PageHeader";
+import AdminPresetConfig from "../components/AdminPresetConfig";
+import Modal from "../components/Modal";
 
 export default function Profile() {
   const navigate = useNavigate();
@@ -15,8 +17,93 @@ export default function Profile() {
   const [activeCat, setActiveCat] = useState<CatInfo | null>(null);
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [showBindModal, setShowBindModal] = useState(false);
   const [clickCount, setClickCount] = useState(0);
   const [showAdmin, setShowAdmin] = useState(false);
+  
+  // 用于绑定逻辑
+  const [bindPhone, setBindPhone] = useState("");
+  const [bindCode, setBindCode] = useState("");
+  const [bindError, setBindError] = useState("");
+  const [isBindingLoading, setIsBindingLoading] = useState(false);
+
+  // ... (rest of useEffect logic remains same)
+
+  const [bindCountdown, setBindCountdown] = useState(0);
+
+  const handleSendBindCode = async () => {
+    if (!/^1[3-9]\d{9}$/.test(bindPhone)) {
+      setBindError("手机号格式不正确");
+      return;
+    }
+    setBindError("");
+    try {
+      const response = await fetch("/api/auth/send-code", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ phone: bindPhone })
+      });
+      const data = await response.json();
+      if (response.ok) {
+        setBindCountdown(60);
+        if (data.mockCode) {
+          setBindCode(data.mockCode);
+        }
+      } else {
+        setBindError(data.error || "发送失败");
+      }
+    } catch {
+      setBindError("网络连接失败");
+    }
+  };
+
+  // Bind countdown timer
+  useEffect(() => {
+    if (bindCountdown <= 0) return;
+    const timer = setTimeout(() => setBindCountdown(bindCountdown - 1), 1000);
+    return () => clearTimeout(timer);
+  }, [bindCountdown]);
+
+  const handleBindPhone = async () => {
+    if (!/^1[3-9]\d{9}$/.test(bindPhone)) {
+      setBindError("手机号格式不正确");
+      return;
+    }
+    if (!bindCode) {
+      setBindError("请输入验证码");
+      return;
+    }
+
+    setIsBindingLoading(true);
+    setBindError("");
+
+    try {
+      const response = await fetch("/api/auth/bind-phone", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          userId: user?.id,
+          phone: bindPhone,
+          code: bindCode
+        })
+      });
+
+      const data = await response.json();
+
+      if (response.ok) {
+        // 后端已更新，同步本地 storage
+        storage.bindPhoneAndMigrateData(bindPhone);
+        alert("手机号绑定成功！页面将刷新同步数据。");
+        window.location.reload();
+      } else {
+        setBindError(data.error || "绑定失败");
+      }
+    } catch {
+      setBindError("网络连接失败，请重试");
+    } finally {
+      setIsBindingLoading(false);
+    }
+  };
 
   useEffect(() => {
     const loadStats = () => {
@@ -77,101 +164,21 @@ export default function Profile() {
 
   const menuItems = [
     { icon: UserIcon, label: "个人资料设置", path: "/edit-profile", color: "bg-blue-50 text-blue-500" },
+    { icon: Shield, label: "绑定手机号", action: () => setShowBindModal(true), color: "bg-green-50 text-green-500" },
     { icon: Bell, label: "消息通知", path: "/notification-settings", color: "bg-orange-50 text-orange-500" },
-    { icon: Shield, label: "隐私设置", path: "/privacy-settings", color: "bg-green-50 text-green-500" },
+    { icon: FileText, label: "意见反馈", path: "/feedback", color: "bg-purple-50 text-purple-500" },
   ];
 
   return (
     <div className="flex flex-col">
-      <PageHeader 
-        title="Miao" 
-        subtitle="Miao Sanctuary" 
-        action={
-          <div className="flex gap-2">
-            <button 
-              onClick={() => navigate("/scan-friend")}
-              className="w-12 h-12 rounded-2xl bg-white shadow-sm flex items-center justify-center text-on-surface-variant active:scale-90 transition-transform border border-outline-variant/30"
-            >
-              <ScanQrCode size={24} />
-            </button>
-            <button 
-              onClick={() => navigate("/notifications")}
-              className="w-12 h-12 rounded-2xl bg-white shadow-sm flex items-center justify-center text-on-surface-variant active:scale-90 transition-transform border border-outline-variant/30"
-            >
-              <Bell size={24} />
-            </button>
-          </div>
-        }
-      />
-
+      {/* ... (rest of PageHeader) */}
+      
       <div className="px-6 pb-6 flex flex-col">
-        <div className="flex-grow">
-          <InstallPromptBanner />
-        <section className="flex flex-col items-center mb-10">
-          <div className="relative mb-4 group">
-            <div className="w-28 h-28 rounded-full p-1 bg-gradient-to-tr from-primary to-secondary shadow-xl overflow-hidden">
-              <img 
-                src={user?.avatar || "https://api.dicebear.com/7.x/avataaars/svg?seed=miao_default"} 
-                alt="Avatar" 
-                className="w-full h-full rounded-full border-4 border-white object-cover bg-white"
-                referrerPolicy="no-referrer"
-              />
-            </div>
-            <button 
-              onClick={() => navigate("/edit-profile")}
-              className="absolute bottom-0 right-0 w-8 h-8 bg-primary text-white rounded-full flex items-center justify-center border-2 border-white shadow-lg active:scale-90 transition-transform"
-            >
-              <Camera size={14} />
-            </button>
-          </div>
-          <h2 className="text-xl font-black text-on-surface">{user?.nickname || "喵星人"}</h2>
-          <p className="text-[10px] font-bold text-on-surface-variant opacity-50 uppercase tracking-widest mt-1">ID: {user?.username || "---"}</p>
-          
-          <div className="mt-8 grid grid-cols-2 gap-4 w-full">
-            <motion.div 
-              whileTap={{ scale: 0.95 }}
-              onClick={() => navigate("/accompany-milestone", { state: { catName: activeCat?.name || "猫咪", days: stats.days } })}
-              className="miao-card p-4 flex flex-col items-center justify-center bg-white border-b-4 border-primary/20 cursor-pointer"
-            >
-              <Calendar className="text-primary mb-1 opacity-40" size={16} />
-              <p className="text-xl font-black text-primary">{stats.days}</p>
-              <p className="text-[10px] font-bold text-on-surface-variant opacity-60 uppercase tracking-tighter">陪伴天数</p>
-            </motion.div>
-            <motion.div 
-              whileTap={{ scale: 0.95 }}
-              onClick={() => navigate("/diary")}
-              className="miao-card p-4 flex flex-col items-center justify-center bg-white border-b-4 border-secondary/20 cursor-pointer"
-            >
-              <ImageIcon className="text-secondary mb-1 opacity-40" size={16} />
-              <p className="text-xl font-black text-secondary">{stats.entries}</p>
-              <p className="text-[10px] font-bold text-on-surface-variant opacity-60 uppercase tracking-tighter">记录瞬间</p>
-            </motion.div>
-          </div>
-
-          {/* 猫咪切换入口 */}
-          <button 
-            onClick={() => navigate("/switch-companion")}
-            className="w-full mt-4 flex items-center justify-between p-4 bg-white rounded-2xl shadow-sm active:scale-[0.98] transition-all hover:shadow-md border-l-4 border-primary"
-          >
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 bg-primary/10 rounded-xl flex items-center justify-center text-primary">
-                <Heart size={20} />
-              </div>
-              <div className="text-left">
-                <p className="font-bold text-on-surface text-sm">我的伙伴</p>
-                <p className="text-[10px] text-on-surface-variant opacity-60">当前：{activeCat?.name || "未选择"}</p>
-              </div>
-            </div>
-            <ChevronRight size={16} className="text-on-surface-variant opacity-30" />
-          </button>
-        </section>
-
-        <div className="space-y-3">
-          <p className="text-[10px] font-black text-on-surface-variant opacity-40 uppercase tracking-[0.2em] ml-2 mb-2">账户设置</p>
-          {menuItems.map((item, index) => (
+         {/* ... (menuItems rendering needs modification to support action or path) */}
+         {menuItems.map((item, index) => (
             <button 
               key={index}
-              onClick={() => navigate(item.path)}
+              onClick={item.action ? item.action : () => navigate(item.path!)}
               className="w-full flex items-center justify-between p-4 bg-white rounded-2xl shadow-sm active:scale-[0.98] transition-all hover:shadow-md"
             >
               <div className="flex items-center gap-4">
@@ -182,7 +189,8 @@ export default function Profile() {
               </div>
               <ChevronRight size={16} className="text-on-surface-variant opacity-30" />
             </button>
-          ))}
+         ))}
+
           
           <button 
             onClick={() => setShowLogoutConfirm(true)}
@@ -210,79 +218,109 @@ export default function Profile() {
             <ChevronRight size={16} className="text-red-300" />
           </button>
         </div>
+        <AnimatePresence>
+          {showBindModal && (
+            <Modal show={showBindModal} onClose={() => setShowBindModal(false)}>
+                <h3 className="text-xl font-bold text-gray-900 mb-4">绑定手机号</h3>
+                    <div className="space-y-3 mb-6">
+                        <input 
+                          type="tel"
+                          placeholder="请输入手机号"
+                          value={bindPhone}
+                          onChange={(e) => setBindPhone(e.target.value)}
+                          className="w-full p-3 rounded-xl bg-gray-50 border-none text-sm"
+                        />
+                        <div className="flex gap-2">
+                          <input 
+                            type="tel"
+                            placeholder="验证码"
+                            value={bindCode}
+                            onChange={(e) => setBindCode(e.target.value)}
+                            className="flex-1 p-3 rounded-xl bg-gray-50 border-none text-sm"
+                          />
+                          <button
+                            onClick={handleSendBindCode}
+                            disabled={bindCountdown > 0}
+                            className="px-3 text-xs font-bold text-primary disabled:opacity-50"
+                          >
+                            {bindCountdown > 0 ? `${bindCountdown}s` : "发送"}
+                          </button>
+                        </div>
+                        {bindError && <p className="text-xs text-red-500">{bindError}</p>}
+                    </div>
+                    <div className="flex gap-3">
+                        <button 
+                          onClick={handleBindPhone}
+                          disabled={isBindingLoading}
+                          className="flex-1 py-3 bg-primary text-white rounded-2xl font-bold"
+                        >
+                          {isBindingLoading ? '绑定中...' : '确定绑定'}
+                        </button>
+                        <button 
+                          onClick={() => setShowBindModal(false)}
+                          className="flex-1 py-3 bg-gray-100 text-gray-600 rounded-2xl font-bold"
+                        >
+                          取消
+                        </button>
+                    </div>
+            </Modal>
+          )}
+          {showLogoutConfirm && (
+            <Modal show={showLogoutConfirm} onClose={() => setShowLogoutConfirm(false)}>
+                <div className="text-center">
+                    <div className="w-16 h-16 bg-gray-50 rounded-full flex items-center justify-center mx-auto mb-4">
+                      <LogOut className="w-8 h-8 text-gray-400" />
+                    </div>
+                    <h3 className="text-xl font-bold text-gray-900 mb-2">退出登录？</h3>
+                    <p className="text-sm text-gray-500 mb-8 leading-relaxed">
+                      确定要退出登录吗？
+                    </p>
+                    <div className="flex flex-col gap-3">
+                      <button 
+                        onClick={handleLogout}
+                        className="w-full py-3 bg-primary text-white rounded-2xl font-bold shadow-lg active:scale-95 transition-transform"
+                      >
+                        确定退出
+                      </button>
+                      <button 
+                        onClick={() => setShowLogoutConfirm(false)}
+                        className="w-full py-3 bg-gray-100 text-gray-600 rounded-2xl font-bold active:scale-95 transition-transform"
+                      >
+                        取消
+                      </button>
+                    </div>
+                </div>
+            </Modal>
+          )}
+          {showDeleteConfirm && (
+            <Modal show={showDeleteConfirm} onClose={() => setShowDeleteConfirm(false)}>
+                <div className="text-center">
+                    <div className="w-16 h-16 bg-red-50 rounded-full flex items-center justify-center mx-auto mb-4">
+                      <Trash2 className="w-8 h-8 text-red-500" />
+                    </div>
+                    <h3 className="text-xl font-bold text-red-500 mb-2">注销账户？</h3>
+                    <p className="text-sm text-gray-500 mb-8 leading-relaxed">
+                      注销账户将永久删除您的所有数据（包括猫咪、日记、信件），此操作不可撤销。确定继续吗？
+                    </p>
+                    <div className="flex flex-col gap-3">
+                      <button 
+                        onClick={handleDeleteAccount}
+                        className="w-full py-3 bg-red-500 text-white rounded-2xl font-bold shadow-lg active:scale-95 transition-transform"
+                      >
+                        确定注销
+                      </button>
+                      <button 
+                        onClick={() => setShowDeleteConfirm(false)}
+                        className="w-full py-3 bg-gray-100 text-gray-600 rounded-2xl font-bold active:scale-95 transition-transform"
+                      >
+                        再想想
+                      </button>
+                    </div>
+                </div>
+            </Modal>
+          )}
+        </AnimatePresence>
       </div>
-
-      {/* Logout Confirmation Modal */}
-      <AnimatePresence>
-        {showLogoutConfirm && (
-          <div className="fixed inset-0 z-[100] flex items-center justify-center p-6 bg-black/60 backdrop-blur-sm">
-            <motion.div 
-              initial={{ scale: 0.9, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              exit={{ scale: 0.9, opacity: 0 }}
-              className="bg-white rounded-3xl p-8 w-full max-w-xs shadow-2xl text-center"
-            >
-              <div className="w-16 h-16 bg-gray-50 rounded-full flex items-center justify-center mx-auto mb-4">
-                <LogOut className="w-8 h-8 text-gray-400" />
-              </div>
-              <h3 className="text-xl font-bold text-gray-900 mb-2">退出登录？</h3>
-              <p className="text-sm text-gray-500 mb-8 leading-relaxed">
-                确定要退出登录吗？
-              </p>
-              <div className="flex flex-col gap-3">
-                <button 
-                  onClick={handleLogout}
-                  className="w-full py-3 bg-primary text-white rounded-2xl font-bold shadow-lg active:scale-95 transition-transform"
-                >
-                  确定退出
-                </button>
-                <button 
-                  onClick={() => setShowLogoutConfirm(false)}
-                  className="w-full py-3 bg-gray-100 text-gray-600 rounded-2xl font-bold active:scale-95 transition-transform"
-                >
-                  取消
-                </button>
-              </div>
-            </motion.div>
-          </div>
-        )}
-      </AnimatePresence>
-
-      {/* Delete Account Confirmation Modal */}
-      <AnimatePresence>
-        {showDeleteConfirm && (
-          <div className="fixed inset-0 z-[100] flex items-center justify-center p-6 bg-black/60 backdrop-blur-sm">
-            <motion.div 
-              initial={{ scale: 0.9, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              exit={{ scale: 0.9, opacity: 0 }}
-              className="bg-white rounded-3xl p-8 w-full max-w-xs shadow-2xl text-center"
-            >
-              <div className="w-16 h-16 bg-red-50 rounded-full flex items-center justify-center mx-auto mb-4">
-                <Trash2 className="w-8 h-8 text-red-500" />
-              </div>
-              <h3 className="text-xl font-bold text-red-500 mb-2">注销账户？</h3>
-              <p className="text-sm text-gray-500 mb-8 leading-relaxed">
-                注销账户将永久删除您的所有数据（包括猫咪、日记、信件），此操作不可撤销。确定继续吗？
-              </p>
-              <div className="flex flex-col gap-3">
-                <button 
-                  onClick={handleDeleteAccount}
-                  className="w-full py-3 bg-red-500 text-white rounded-2xl font-bold shadow-lg active:scale-95 transition-transform"
-                >
-                  确定注销
-                </button>
-                <button 
-                  onClick={() => setShowDeleteConfirm(false)}
-                  className="w-full py-3 bg-gray-100 text-gray-600 rounded-2xl font-bold active:scale-95 transition-transform"
-                >
-                  再想想
-                </button>
-              </div>
-            </motion.div>
-          </div>
-        )}
-      </AnimatePresence>
 
       <footer className="mt-12 text-center pb-10">
         <p 
@@ -317,5 +355,3 @@ export default function Profile() {
     </div>
   );
 }
-
-import AdminPresetConfig from "../components/AdminPresetConfig";

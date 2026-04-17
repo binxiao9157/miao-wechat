@@ -15,7 +15,6 @@ const Welcome = lazy(() => import("./pages/Welcome"));
 // Points 和 Profile 由 MainLayout 持久化渲染，无需在路由层 lazy 加载
 const EditProfile = lazy(() => import("./pages/EditProfile"));
 const ChangePassword = lazy(() => import("./pages/ChangePassword"));
-const PrivacySettings = lazy(() => import("./pages/PrivacySettings"));
 const Notifications = lazy(() => import("./pages/Notifications"));
 const PrivacyPolicy = lazy(() => import("./pages/PrivacyPolicy"));
 const SwitchCompanion = lazy(() => import("./pages/SwitchCompanion"));
@@ -29,6 +28,7 @@ const AccompanyMilestonePage = lazy(() => import("./pages/AccompanyMilestonePage
 const AddFriendQR = lazy(() => import("./pages/AddFriendQR"));
 const ScanFriend = lazy(() => import("./pages/ScanFriend"));
 const Download = lazy(() => import("./pages/Download"));
+const Feedback = lazy(() => import("./pages/Feedback"));
 
 import { AuthProvider, useAuthContext } from "./context/AuthContext";
 
@@ -97,12 +97,12 @@ function AppRoutes() {
         {/* Settings & Detail Routes (No Bottom Nav) */}
         <Route path="/edit-profile" element={<ProtectedRoute><EditProfile /></ProtectedRoute>} />
         <Route path="/change-password" element={<ProtectedRoute><ChangePassword /></ProtectedRoute>} />
-        <Route path="/privacy-settings" element={<ProtectedRoute><PrivacySettings /></ProtectedRoute>} />
         <Route path="/notification-settings" element={<ProtectedRoute><Notifications /></ProtectedRoute>} />
         <Route path="/privacy-policy" element={<PrivacyPolicy />} />
         <Route path="/switch-companion" element={<ProtectedRoute><SwitchCompanion /></ProtectedRoute>} />
         <Route path="/add-friend-qr" element={<ProtectedRoute><AddFriendQR /></ProtectedRoute>} />
         <Route path="/scan-friend" element={<ProtectedRoute><ScanFriend /></ProtectedRoute>} />
+        <Route path="/feedback" element={<ProtectedRoute><Feedback /></ProtectedRoute>} />
   
         {/* Fallback */}
         <Route path="*" element={<Navigate to="/login" replace />} />
