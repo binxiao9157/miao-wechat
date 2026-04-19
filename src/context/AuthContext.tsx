@@ -7,10 +7,9 @@ interface AuthContextType {
   isInitializing: boolean;
   hasCat: boolean;
   catCount: number;
-  login: (phone: string, code?: string, password?: string) => Promise<{ success: boolean; error?: string; migrated?: boolean }>;
-  register: (phone: string, code: string, nickname: string, password?: string) => Promise<{ success: boolean; error?: string }>;
+  login: (username: string, password: string) => boolean;
+  register: (info: UserInfo) => void;
   logout: () => void;
-  sendCode: (phone: string) => Promise<{ success: boolean; error?: string; mockCode?: string }>;
   updateProfile: (updates: Partial<UserInfo>) => void;
   refreshCatStatus: () => void;
 }
@@ -21,7 +20,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   // 移除免登录逻辑，每次打开 App 均需重新登录
   const [user, setUser] = useState<UserInfo | null>(null);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
-  const [isInitializing, setIsInitializing] = useState(true);
+  const [isInitializing, setIsInitializing] = useState(false);
   const [catCount, setCatCount] = useState(0);
 
   const hasCat = useMemo(() => catCount > 0, [catCount]);
@@ -31,136 +30,43 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }, []);
 
   useEffect(() => {
-    const savedUser = storage.getUserInfo();
-    const savedToken = storage.getToken();
-
-    // 必须同时有 user 和 token 才恢复会话
-    if (savedUser && savedToken) {
-      console.log("[Auth] 凭证校验通过，恢复会话");
-      setUser(savedUser);
-      setIsAuthenticated(true);
-
-      // 如果已登录但没猫，尝试一次数据搜救
-      if (storage.getCatList().length === 0) {
-        console.log("[Auth] 猫咪缺失，启动数据搜救...");
-        storage.rescueMyCat();
-      }
-
-      refreshCatStatus();
-      setIsInitializing(false);
-    } else {
-      console.log("[Auth] 未发现有效凭证，清理残留");
-      storage.clearCurrentUser();
-      refreshCatStatus();
-      setIsInitializing(false);
-    }
+    // 初始挂载时清除旧会话，确保“每次打开都需要登录”
+    storage.clearCurrentUser();
+    refreshCatStatus();
   }, [refreshCatStatus]);
 
-  const login = async (id: string, code?: string, password?: string): Promise<{ success: boolean; error?: string; migrated?: boolean }> => {
-    try {
-      const isUsername = !id.match(/^\d{11}$/);
-      const payload = isUsername ? { username: id, password } : { phone: id, code, password };
-
-      const response = await fetch("/api/auth/login", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload)
-      });
-
-      const data = await response.json();
-
-      if (!response.ok) {
-        return { success: false, error: data.error || "登录失败" };
-      }
-
-      // 1. 保存用户信息和 token
-      const userInfo: UserInfo = {
-        id: data.user.id,
-        phone: data.user.phone,
-        nickname: data.user.nickname,
-        avatar: data.user.avatar,
-        username: data.user.username || undefined
-      };
-      storage.saveUserInfo(userInfo);
-      storage.saveToken(data.token);
-      storage.saveLoginTime(Date.now());
-      storage.saveLastActiveTime(Date.now());
-
-      // 2. 尝试迁移旧数据
-      const migrationResult = storage.rescueMyCat();
-      const didMigrate = migrationResult.count > 0;
-      if (didMigrate) {
-        console.log(`[RESCUE] 已从 [${migrationResult.source}] 找回 ${migrationResult.count} 只猫咪`);
-      }
-
-      // 3. 更新内存状态（不做路由跳转，交给调用方）
-      setUser(userInfo);
+  const login = (username: string, password: string): boolean => {
+    const users = storage.getAllUsers();
+    const savedUser = users.find(u => u.username === username && u.password === password);
+    
+    if (savedUser) {
+      // 1. 设置当前用户
+      storage.saveUserInfo(savedUser);
+      storage.saveToken('mock_token_' + Date.now());
+      storage.saveLoginTime(Date.now()); // 记录登录时间
+      storage.saveLastActiveTime(Date.now()); // 记录最后活跃时间
+      
+      // 2. 更新内存状态
       setIsAuthenticated(true);
+      setUser(savedUser);
+      
       refreshCatStatus();
-
-      return { success: true, migrated: didMigrate };
-    } catch (e) {
-      console.error("Login error:", e);
-      return { success: false, error: "网络连接失败，请稍后重试" };
+      return true;
     }
+    return false;
   };
 
-  const register = async (phone: string, code: string, nickname: string, password?: string): Promise<{ success: boolean; error?: string }> => {
-    try {
-      const response = await fetch("/api/auth/register", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ phone, code, nickname, password })
-      });
+  const register = (info: UserInfo): void => {
+    // 1. 保存用户信息并设为当前用户
+    storage.saveUserInfo(info);
+    storage.saveToken('mock_token_' + Date.now());
+    storage.saveLoginTime(Date.now());
+    storage.saveLastActiveTime(Date.now());
 
-      const data = await response.json();
-
-      if (!response.ok) {
-        return { success: false, error: data.error || "注册失败" };
-      }
-
-      const userInfo: UserInfo = {
-        id: data.user.id,
-        phone: data.user.phone,
-        nickname: data.user.nickname,
-        avatar: data.user.avatar,
-        username: data.user.username || undefined
-      };
-      storage.saveUserInfo(userInfo);
-      storage.saveToken(data.token);
-      storage.saveLoginTime(Date.now());
-      storage.saveLastActiveTime(Date.now());
-
-      // 尝试迁移旧数据（新注册用户设备上可能有旧账号数据）
-      storage.rescueMyCat();
-
-      setUser(userInfo);
-      setIsAuthenticated(true);
-      refreshCatStatus();
-
-      return { success: true };
-    } catch (e) {
-      console.error("Register error:", e);
-      return { success: false, error: "网络连接失败，请稍后重试" };
-    }
-  };
-
-  const sendCode = async (phone: string): Promise<{ success: boolean; error?: string; mockCode?: string }> => {
-    try {
-      const response = await fetch("/api/auth/send-code", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ phone })
-      });
-      const data = await response.json();
-      if (response.ok) {
-        return { success: true, mockCode: data.mockCode };
-      } else {
-        return { success: false, error: data.error || "验证码发送失败" };
-      }
-    } catch (e) {
-      return { success: false, error: "网络繁忙，请稍后再试" };
-    }
+    // 2. 更新内存状态
+    setUser(info);
+    setIsAuthenticated(true);
+    refreshCatStatus(); // 新账号此时 catList 必为空
   };
 
   const logout = () => {
@@ -185,7 +91,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const contextValue = useMemo(() => ({
-    user, isAuthenticated, isInitializing, hasCat, catCount, login, register, logout, updateProfile, refreshCatStatus, sendCode
+    user, isAuthenticated, isInitializing, hasCat, catCount, login, register, logout, updateProfile, refreshCatStatus
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }), [user, isAuthenticated, isInitializing, hasCat, catCount]);
 

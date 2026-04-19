@@ -39,7 +39,23 @@
       "Bash(wc -l \"D:\\\\Workspace\\\\AICode\\\\Miao_V1.0\\\\src\\\\pages\"/*.tsx)",
       "Bash(npx vite:*)",
       "Bash(node_modules/.bin/vite build:*)",
-      "Bash(git add:*)"
+      "Bash(git add:*)",
+      "Bash(GIT_CONFIG_NOSYSTEM=1 git commit:*)",
+      "Bash(npm list:*)",
+      "Bash(npx -p typescript tsc --noEmit --project tsconfig.app.json)",
+      "Bash(git stash:*)",
+      "Bash(wc -l patches/auth-fix-p*.diff)",
+      "Bash(git diff:*)",
+      "Bash(git checkout:*)",
+      "Bash(npm install:*)",
+      "Bash(echo \"exit: $?\")",
+      "Bash(GIT_CONFIG_NOSYSTEM=1 git checkout -- .)",
+      "Bash(GIT_CONFIG_NOSYSTEM=1 git add --renormalize .)",
+      "Bash(GIT_CONFIG_NOSYSTEM=1 git add .gitattributes)",
+      "Bash(GIT_CONFIG_NOSYSTEM=1 git add:*)",
+      "Bash(GIT_CONFIG_NOSYSTEM=1 git ls-tree -r HEAD --name-only)",
+      "Bash(GIT_CONFIG_NOSYSTEM=1 git reset:*)",
+      "Bash(git commit -m ':*)"
     ]
   }
 }
