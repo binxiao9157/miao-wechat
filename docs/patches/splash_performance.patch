@@ -1,0 +1,166 @@
+diff --git a/index.html b/index.html
+index cd5ea94..61eb209 100644
+--- a/index.html
++++ b/index.html
+@@ -4,6 +4,11 @@
+     <meta charset="UTF-8" />
+     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+     <meta name="theme-color" content="#FFF9F5" />
++
++    <!-- 关键资源预加载：启动屏图片在 HTML 解析阶段即开始下载 -->
++    <link rel="preload" as="image" type="image/webp" href="/splash.webp" />
++    <link rel="preload" as="image" href="/logo.png" />
++
+     <!-- Google Fonts 异步加载：先用系统字体渲染，字体到达后无缝替换 -->
+     <link rel="preconnect" href="https://fonts.googleapis.com" />
+     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+@@ -17,7 +22,7 @@
+     <link rel="apple-touch-icon" href="/icon-180.png" />
+     <!-- iOS Splash Screen Placeholder -->
+     <link rel="apple-touch-startup-image" href="/og-image.jpg" />
+-    
++
+     <!-- Open Graph / WeChat Social Meta Tags -->
+     <meta property="og:type" content="website" />
+     <meta property="og:title" content="Miao - 记录与猫咪的每一个瞬间" />
+@@ -27,30 +32,48 @@
+     <link rel="image_src" href="/og-image.jpg" />
+     <meta name="twitter:image" content="/og-image.jpg" />
+     <meta name="thumbnail" content="/og-image.jpg" />
+-    
++
+     <!-- WeChat specific: First image in body is used as fallback -->
+     <meta itemprop="image" content="/og-image.jpg" />
+-    
++
+     <title>Miao - 遇见你的数字猫咪</title>
++    <style>
++      #splash-screen {
++        position: fixed;
++        inset: 0;
++        z-index: 9999;
++        background: #fff;
++        display: flex;
++        align-items: center;
++        justify-content: center;
++        transition: opacity 0.6s ease-out;
++      }
++      #splash-screen.fade-out {
++        opacity: 0;
++        pointer-events: none;
++      }
++      #splash-screen img {
++        width: 100%;
++        height: 100%;
++        object-fit: cover;
++      }
++    </style>
+   </head>
+   <body style="background-color: #FFF5F0;">
+     <!-- WeChat Share Image Fallback (Hidden) -->
+     <div style="display:none;">
+       <img src="/og-image.jpg" alt="share" />
+     </div>
+-    <div id="root">
+-      <div style="position: fixed; inset: 0; background-color: #FFF5F0; display: flex; flex-direction: column; align-items: center; justify-content: center; z-index: 9999;">
+-        <div style="width: 96px; height: 96px; background-color: white; border-radius: 50%; box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1); display: flex; align-items: center; justify-content: center; margin-bottom: 16px;">
+-          <span style="font-size: 24px; font-weight: 900; color: #FF9D76; font-family: system-ui, -apple-system, sans-serif;">Miao</span>
+-        </div>
+-        <div style="display: flex; gap: 4px;">
+-          <div style="width: 8px; height: 8px; background-color: #FF9D76; border-radius: 50%;"></div>
+-          <div style="width: 8px; height: 8px; background-color: #FF9D76; border-radius: 50%;"></div>
+-          <div style="width: 8px; height: 8px; background-color: #FF9D76; border-radius: 50%;"></div>
+-        </div>
+-      </div>
++
++    <!-- 启动屏：纯 HTML/CSS，不依赖 JS 框架，首帧即渲染 -->
++    <div id="splash-screen">
++      <picture>
++        <source srcset="/splash.webp" type="image/webp" />
++        <img src="/splash.png" alt="Miao" />
++      </picture>
+     </div>
++
++    <div id="root"></div>
+     <script type="module" src="/src/main.tsx"></script>
+   </body>
+ </html>
+-
+diff --git a/src/components/SplashScreen.tsx b/src/components/SplashScreen.tsx
+index 9eebb00..9514799 100644
+--- a/src/components/SplashScreen.tsx
++++ b/src/components/SplashScreen.tsx
+@@ -1,62 +1,23 @@
+-import React, { useState, useEffect } from "react";
+-
+-const SplashScreen: React.FC = () => {
+-  const [isFading, setIsFading] = useState(false);
+-  const [isVisible, setIsVisible] = useState(true);
+-  const [isLoaded, setIsLoaded] = useState(false);
++import { useEffect } from "react";
+ 
++export default function SplashScreen() {
+   useEffect(() => {
+-    // Preload the splash image to ensure it shows immediately and doesn't flicker
+-    const img = new Image();
+-    img.src = "/splash.png";
+-    img.onload = () => {
+-      setIsLoaded(true);
+-    };
+-    // Fallback if image fails to load or takes too long, we still want to show the app
+-    const fallback = setTimeout(() => {
+-      setIsLoaded(true);
+-    }, 1000);
++    const el = document.getElementById("splash-screen");
++    if (!el) return;
+ 
+-    return () => clearTimeout(fallback);
+-  }, []);
+-
+-  useEffect(() => {
+-    if (!isLoaded) return;
+-
+-    // Stage 1: Display for a shorter duration (1.5s) to feel snappier
+     const fadeTimer = setTimeout(() => {
+-      setIsFading(true);
+-    }, 1500);
++      el.classList.add("fade-out");
++    }, 1200);
+ 
+-    // Stage 2: After 0.6s of fading (total 2.1s), completely unmount
+     const removeTimer = setTimeout(() => {
+-      setIsVisible(false);
+-    }, 2100);
++      el.remove();
++    }, 1800);
+ 
+     return () => {
+       clearTimeout(fadeTimer);
+       clearTimeout(removeTimer);
+     };
+-  }, [isLoaded]);
+-
+-  if (!isVisible) return null;
+-
+-  return (
+-    <div
+-      className={`fixed inset-0 z-[9999] bg-white flex items-center justify-center transition-opacity duration-600 ease-out ${
+-        isFading ? "opacity-0 pointer-events-none" : "opacity-100"
+-      }`}
+-      style={{ display: isVisible ? "flex" : "none" }}
+-    >
+-      {isLoaded && (
+-        <img
+-          src="/splash.png"
+-          alt="Splash Screen"
+-          className="w-full h-full object-cover"
+-        />
+-      )}
+-    </div>
+-  );
+-};
++  }, []);
+ 
+-export default SplashScreen;
++  return null;
++}

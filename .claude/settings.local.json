@@ -73,7 +73,11 @@
       "Bash(GIT_CONFIG_NOSYSTEM=1 git log *)",
       "Bash(GIT_CONFIG_NOSYSTEM=1 git diff *)",
       "Bash(git diff *)",
-      "Read(//tmp/**)"
+      "Read(//tmp/**)",
+      "Bash(npx --yes sharp-cli --version)",
+      "Bash(npx --yes sharp-cli -i public/splash.png -o public/splash.webp --format webp -- --quality 80)",
+      "Bash(npx --yes sharp-cli -i public/splash.png -o public/splash-opt.png --format png -- --compressionLevel 9)",
+      "Bash(cp docs/patches/splash_performance.patch docs/patches/splash_performance.txt)"
     ]
   }
 }
