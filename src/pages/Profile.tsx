@@ -111,10 +111,10 @@ export default function Profile() {
   };
 
   return (
-    <div className="flex flex-col">
+    <div className="flex flex-col h-full overflow-y-auto no-scrollbar">
       <PageHeader 
         title="Miao" 
-        subtitle="Miao Sanctuary" 
+        subtitle="MIAO SANCTUARY" 
         action={
           <div className="flex gap-2">
             <button 
@@ -138,7 +138,7 @@ export default function Profile() {
         }
       />
 
-      <div className="px-6 pb-6 flex flex-col">
+      <div className="px-6 pb-6 flex flex-col shrink-0 overflow-visible">
         <div className="flex-grow">
           <InstallPromptBanner />
         <section className="flex flex-col items-center mb-10">
@@ -332,13 +332,21 @@ export default function Profile() {
           }}
           className="text-[10px] font-bold text-on-surface-variant opacity-30 uppercase tracking-widest cursor-pointer select-none"
         >
-          Miao Version 1.0.0
+          MIAO SANCTUARY
         </p>
         <div className="flex justify-center gap-1 mt-1">
           <Heart size={8} className="text-primary fill-current" />
           <Heart size={8} className="text-secondary fill-current" />
           <Heart size={8} className="text-primary fill-current" />
         </div>
+        <a 
+          href="https://beian.miit.gov.cn/" 
+          target="_blank" 
+          rel="noopener noreferrer"
+          className="text-[10px] text-on-surface-variant/30 tracking-wider mt-2 hover:opacity-100 transition-opacity inline-block"
+        >
+          浙ICP备2026026483号-1
+        </a>
       </footer>
 
       {/* Admin Panel Modal */}

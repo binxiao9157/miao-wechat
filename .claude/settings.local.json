@@ -55,7 +55,25 @@
       "Bash(GIT_CONFIG_NOSYSTEM=1 git add:*)",
       "Bash(GIT_CONFIG_NOSYSTEM=1 git ls-tree -r HEAD --name-only)",
       "Bash(GIT_CONFIG_NOSYSTEM=1 git reset:*)",
-      "Bash(git commit -m ':*)"
+      "Bash(git commit -m ':*)",
+      "Bash(xargs -I{} basename {})",
+      "Bash(git commit:*)",
+      "Bash(git branch:*)",
+      "Bash(npx cap:*)",
+      "Bash(./gradlew assembleDebug)",
+      "Bash(git log:*)",
+      "Bash(mkdir -p docs/patches)",
+      "Bash(git format-patch:*)",
+      "Bash(GIT_CONFIG_NOSYSTEM=1 git remote *)",
+      "Bash(GIT_CONFIG_NOSYSTEM=1 git branch *)",
+      "Bash(GIT_CONFIG_NOSYSTEM=1 git fetch *)",
+      "Bash(GIT_CONFIG_NOSYSTEM=1 git checkout main)",
+      "Bash(GIT_CONFIG_NOSYSTEM=1 git pull origin main)",
+      "Bash(GIT_CONFIG_NOSYSTEM=1 git stash push -m \"capacitor wip changes\")",
+      "Bash(GIT_CONFIG_NOSYSTEM=1 git log *)",
+      "Bash(GIT_CONFIG_NOSYSTEM=1 git diff *)",
+      "Bash(git diff *)",
+      "Read(//tmp/**)"
     ]
   }
 }

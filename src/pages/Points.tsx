@@ -60,14 +60,14 @@ export default function Points() {
   const effectivePoints = isDebugMode ? Math.max(points, REDEEM_THRESHOLD) : points;
 
   return (
-    <div className="flex flex-col">
+    <div className="flex flex-col h-full overflow-y-auto no-scrollbar">
       <PageHeader 
         title="积分中心" 
         subtitle="Points Center" 
       />
 
       <div 
-        className="px-6 pb-32"
+        className="px-6 pb-32 shrink-0 overflow-visible"
         style={{ paddingBottom: 'calc(120px + env(safe-area-inset-bottom))' }}
       >
         <div 
@@ -95,7 +95,15 @@ export default function Points() {
 
         <div className="space-y-4">
           {tasks.map((task) => (
-            <div key={task.id} className="miao-card p-5 flex items-center justify-between group active:scale-[0.98] transition-transform">
+            <div 
+              key={task.id} 
+              onClick={() => {
+                if (!task.completed && task.id === 2) {
+                  navigate("/", { state: { triggerInteraction: 'feather' } });
+                }
+              }}
+              className={`miao-card p-5 flex items-center justify-between group active:scale-[0.98] transition-transform ${!task.completed && task.id === 2 ? 'cursor-pointer' : ''}`}
+            >
               <div className="flex items-center gap-4">
                 <div className={`w-12 h-12 rounded-2xl flex items-center justify-center transition-colors ${
                   task.completed ? "bg-green-50 text-green-500" : "bg-primary/5 text-primary"
@@ -115,7 +123,9 @@ export default function Points() {
               {task.completed ? (
                 <span className="text-[10px] font-bold text-green-500 bg-green-50 px-3 py-1.5 rounded-full">已完成</span>
               ) : (
-                <button className="w-8 h-8 rounded-full bg-primary/10 text-primary flex items-center justify-center group-hover:bg-primary group-hover:text-white transition-all">
+                <button 
+                  className="w-8 h-8 rounded-full bg-primary/10 text-primary flex items-center justify-center group-hover:bg-primary group-hover:text-white transition-all"
+                >
                   <ArrowRight size={16} />
                 </button>
               )}

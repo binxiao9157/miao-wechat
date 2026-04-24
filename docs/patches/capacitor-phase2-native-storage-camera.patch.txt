@@ -1,0 +1,689 @@
+From 81ba59287ac660f257b7d5a3da07b5c3f9d6a7a5 Mon Sep 17 00:00:00 2001
+From: lanzhou <lanzhou@miao.dev>
+Date: Mon, 20 Apr 2026 08:21:22 +0800
+Subject: [PATCH] =?UTF-8?q?feat:=20=E5=8E=9F=E7=94=9F=E5=AD=98=E5=82=A8?=
+ =?UTF-8?q?=E6=8C=81=E4=B9=85=E5=8C=96=20+=20Camera=20=E6=8B=8D=E7=85=A7/?=
+ =?UTF-8?q?=E7=9B=B8=E5=86=8C=E9=80=82=E9=85=8D=20=E2=80=94=20Capacitor=20?=
+ =?UTF-8?q?=E8=BF=81=E7=A7=BB=20Phase=202?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+- 新增 nativeStorage 适配层，auth token/用户信息写入 Capacitor Preferences（防 WebView 缓存丢失）
+- 启动时从 Preferences 恢复关键数据到 localStorage
+- scannerService 拆分为 camera/gallery 两入口，拍照后 html5-qrcode 解码
+- ScanFriend 原生端改为点击拍照扫码（替代实时摄像头流）
+- Diary/EditProfile/UploadMaterial 原生端走 Capacitor Camera 选图
+- EditProfile 头像增加客户端压缩（400px/JPEG 0.7）
+
+Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>
+---
+ src/pages/Diary.tsx            |  30 ++++--
+ src/pages/EditProfile.tsx      |  48 ++++++++-
+ src/pages/ScanFriend.tsx       | 176 +++++++++++++++++++++------------
+ src/pages/UploadMaterial.tsx   |  13 ++-
+ src/services/nativeStorage.ts  |  48 +++++++++
+ src/services/scannerService.ts |  48 +++++++--
+ src/services/storage.ts        |  47 ++++++++-
+ src/utils/nativeInit.ts        |   4 +
+ 8 files changed, 325 insertions(+), 89 deletions(-)
+ create mode 100644 src/services/nativeStorage.ts
+
+diff --git a/src/pages/Diary.tsx b/src/pages/Diary.tsx
+index 16c59df..71db107 100644
+--- a/src/pages/Diary.tsx
++++ b/src/pages/Diary.tsx
+@@ -10,6 +10,8 @@ import { shareService } from "../services/shareService";
+ import PageHeader from "../components/PageHeader";
+ import { mediaStorage } from "../services/mediaStorage";
+ import { mockFriendService } from "../services/mockFriendService";
++import { isNative } from "../utils/platform";
++import { pickImage } from "../services/cameraService";
+ 
+ export default function Diary() {
+   const { user } = useAuthContext();
+@@ -586,26 +588,36 @@ export default function Diary() {
+               {/* 弹窗底部操作栏 (固定) */}
+               <div className="flex items-center justify-between p-6 pt-4 border-t border-outline-variant/30 shrink-0 bg-background">
+                 <div className="flex gap-3">
+-                  <button 
+-                    onClick={() => fileInputRef.current?.click()}
++                  <button
++                    onClick={async () => {
++                      if (isNative()) {
++                        const dataUrl = await pickImage('gallery');
++                        if (dataUrl) {
++                          if (selectedMedia?.url?.startsWith('blob:')) URL.revokeObjectURL(selectedMedia.url);
++                          setSelectedMedia({ url: dataUrl, type: 'image' });
++                        }
++                      } else {
++                        fileInputRef.current?.click();
++                      }
++                    }}
+                     className="w-12 h-12 bg-surface-container rounded-2xl flex items-center justify-center text-on-surface-variant hover:text-primary transition-all active:scale-90"
+                     title="上传图片"
+                   >
+                     <ImageIcon size={24} />
+                   </button>
+-                  <button 
++                  <button
+                     onClick={() => fileInputRef.current?.click()}
+                     className="w-12 h-12 bg-surface-container rounded-2xl flex items-center justify-center text-on-surface-variant hover:text-primary transition-all active:scale-90"
+                     title="上传视频"
+                   >
+                     <Video size={24} />
+                   </button>
+-                  <input 
+-                    type="file" 
+-                    ref={fileInputRef} 
+-                    hidden 
+-                    accept="image/*,video/*" 
+-                    onChange={handleFileChange} 
++                  <input
++                    type="file"
++                    ref={fileInputRef}
++                    hidden
++                    accept="image/*,video/*"
++                    onChange={handleFileChange}
+                   />
+                 </div>
+                 {/* [FIX] 发布按钮位置：确保在右下角，并使用品牌色 */}
+diff --git a/src/pages/EditProfile.tsx b/src/pages/EditProfile.tsx
+index 5a92999..d6bf224 100644
+--- a/src/pages/EditProfile.tsx
++++ b/src/pages/EditProfile.tsx
+@@ -3,6 +3,8 @@ import { useNavigate } from "react-router-dom";
+ import { ArrowLeft, Camera, Check, Image as ImageIcon, X } from "lucide-react";
+ import { useAuth } from "../hooks/useAuth";
+ import { motion, AnimatePresence } from "motion/react";
++import { isNative } from "../utils/platform";
++import { pickImage } from "../services/cameraService";
+ 
+ export default function EditProfile() {
+   const navigate = useNavigate();
+@@ -78,17 +80,55 @@ export default function EditProfile() {
+     }
+   };
+ 
+-  const triggerFilePicker = () => {
++  const triggerFilePicker = async () => {
++    if (isNative()) {
++      const dataUrl = await pickImage('gallery');
++      if (dataUrl) {
++        compressAndSetAvatar(dataUrl);
++      }
++      return;
++    }
+     fileInputRef.current?.click();
+   };
+ 
+-  const handleMockCamera = () => {
++  const handleNativeCamera = async () => {
++    if (isNative()) {
++      const dataUrl = await pickImage('camera');
++      if (dataUrl) {
++        compressAndSetAvatar(dataUrl);
++      }
++      return;
++    }
++    // Web 兜底：随机头像
+     const newSeed = Math.floor(Math.random() * 1000);
+     const mockUrl = `https://api.dicebear.com/7.x/avataaars/svg?seed=${newSeed}`;
+     setAvatar(mockUrl);
+     setShowActionSheet(false);
+   };
+ 
++  const compressAndSetAvatar = (dataUrl: string) => {
++    const img = new Image();
++    img.onload = () => {
++      const canvas = document.createElement('canvas');
++      const MAX_SIZE = 400;
++      let width = img.width;
++      let height = img.height;
++      if (width > height) {
++        if (width > MAX_SIZE) { height *= MAX_SIZE / width; width = MAX_SIZE; }
++      } else {
++        if (height > MAX_SIZE) { width *= MAX_SIZE / height; height = MAX_SIZE; }
++      }
++      canvas.width = width;
++      canvas.height = height;
++      const ctx = canvas.getContext('2d');
++      ctx?.drawImage(img, 0, 0, width, height);
++      const compressed = canvas.toDataURL('image/jpeg', 0.7);
++      setAvatar(compressed.length > 500 * 1024 ? canvas.toDataURL('image/jpeg', 0.4) : compressed);
++      setShowActionSheet(false);
++    };
++    img.src = dataUrl;
++  };
++
+   return (
+     <div 
+       className="min-h-screen bg-background px-6 pb-6 relative overflow-hidden"
+@@ -221,8 +261,8 @@ export default function EditProfile() {
+                   <span className="font-bold text-sm text-on-surface">从相册选择</span>
+                 </button>
+ 
+-                <button 
+-                  onClick={handleMockCamera}
++                <button
++                  onClick={handleNativeCamera}
+                   className="flex flex-col items-center gap-3 p-6 bg-white rounded-[32px] border border-outline-variant/30 active:scale-95 transition-transform"
+                 >
+                   <div className="w-14 h-14 bg-orange-50 text-orange-500 rounded-2xl flex items-center justify-center">
+diff --git a/src/pages/ScanFriend.tsx b/src/pages/ScanFriend.tsx
+index 071193e..c19bc25 100644
+--- a/src/pages/ScanFriend.tsx
++++ b/src/pages/ScanFriend.tsx
+@@ -1,10 +1,12 @@
+ import React, { useEffect, useState, useRef } from "react";
+ import { useNavigate } from "react-router-dom";
+ import { Html5Qrcode } from "html5-qrcode";
+-import { ChevronLeft, Zap, Image as ImageIcon, QrCode, CheckCircle, AlertCircle, UserPlus, X, Sparkles } from "lucide-react";
++import { ChevronLeft, Zap, Image as ImageIcon, QrCode, CheckCircle, AlertCircle, UserPlus, X, Sparkles, Camera } from "lucide-react";
+ import { motion, AnimatePresence } from "motion/react";
+ import { storage, FriendInfo } from "../services/storage";
+ import { QRCodeCanvas } from "qrcode.react";
++import { isNative } from "../utils/platform";
++import { scanQRFromCamera, scanQRFromGallery } from "../services/scannerService";
+ 
+ export default function ScanFriend() {
+   const navigate = useNavigate();
+@@ -33,9 +35,26 @@ export default function ScanFriend() {
+     }
+   };
+ 
++  // 原生端：使用 Capacitor Camera 拍照后解码
++  const handleNativeScan = async (source: 'camera' | 'gallery') => {
++    try {
++      const result = source === 'camera' ? await scanQRFromCamera() : await scanQRFromGallery();
++      if (result) {
++        handleScanResult(result);
++      } else {
++        setError("未在图片中识别到二维码");
++        setTimeout(() => setError(null), 3000);
++      }
++    } catch (err: any) {
++      console.error("Native scan error:", err);
++      setError("扫码失败，请重试");
++      setTimeout(() => setError(null), 3000);
++    }
++  };
++
+   const startScanner = async (isUnmounted = false) => {
+-    if (isUnmounted) return;
+-    
++    if (isUnmounted || isNative()) return;
++
+     try {
+       if (scannerRef.current) {
+         try {
+@@ -45,14 +64,14 @@ export default function ScanFriend() {
+           console.warn("Scanner cleanup warning:", e);
+         }
+       }
+-      
++
+       stopTracks();
+ 
+       const html5QrCode = new Html5Qrcode("reader");
+       scannerRef.current = html5QrCode;
+ 
+-      const config = { 
+-        fps: 30, 
++      const config = {
++        fps: 30,
+         qrbox: (viewfinderWidth: number, viewfinderHeight: number) => {
+           const minEdge = Math.min(viewfinderWidth, viewfinderHeight);
+           const qrboxSize = Math.floor(minEdge * 0.7);
+@@ -257,51 +276,76 @@ export default function ScanFriend() {
+     catAvatar: activeCat?.avatar || ''
+   });
+ 
++  const nativeMode = isNative();
++
+   return (
+     <div className="fixed inset-0 bg-transparent overflow-hidden z-[100]">
+-      <div 
+-        id="reader" 
+-        className="absolute inset-0 w-full h-full [&>video]:object-cover [&>video]:w-full [&>video]:h-full [&>div]:!hidden [&>span]:!hidden [&>canvas]:!hidden [&>video]:!block"
+-      ></div>
+-      
+-      <div className="absolute inset-0 z-10 pointer-events-none overflow-hidden">
+-        <motion.div 
+-          initial={{ top: "25%", opacity: 0 }}
+-          animate={{ 
+-            top: ["25%", "75%"],
+-            opacity: [0, 1, 1, 0]
+-          }}
+-          transition={{ 
+-            duration: 2.2, 
+-            repeat: Infinity, 
+-            times: [0, 0.1, 0.9, 1],
+-            ease: "linear" 
+-          }}
+-          className="absolute left-[12.5%] right-[12.5%] h-[60px] pointer-events-none"
+-        >
+-          {/* 支付宝式网格光晕 (Advanced Grid Glow Effect) */}
+-          <div className="absolute inset-0 overflow-hidden">
+-            <div 
+-              className="absolute inset-0 bg-gradient-to-t from-[#FF9D76]/60 to-transparent"
+-              style={{
+-                backgroundImage: `
+-                  linear-gradient(to top, rgba(255,157,118,0.6), transparent),
+-                  linear-gradient(to right, rgba(255,157,118,0.25) 1px, transparent 1px),
+-                  linear-gradient(to bottom, rgba(255,157,118,0.25) 1px, transparent 1px)
+-                `,
+-                backgroundSize: '100% 100%, 2px 2px, 2px 2px'
+-              }}
+-            />
++      {/* Web: 实时摄像头扫描区域 */}
++      {!nativeMode && (
++        <div
++          id="reader"
++          className="absolute inset-0 w-full h-full [&>video]:object-cover [&>video]:w-full [&>video]:h-full [&>div]:!hidden [&>span]:!hidden [&>canvas]:!hidden [&>video]:!block"
++        ></div>
++      )}
++      {/* 隐藏的 QR 解码容器（原生端使用） */}
++      <div id="__qr-decode-tmp" className="hidden"></div>
++
++      {/* Native: 点击扫码的简洁界面 */}
++      {nativeMode && (
++        <div className="absolute inset-0 bg-gradient-to-b from-[#2D1B14] to-[#1A0E09] flex flex-col items-center justify-center gap-8">
++          <div className="text-center mb-4">
++            <p className="text-white/40 text-xs font-bold uppercase tracking-widest mb-2">Scan QR Code</p>
++            <p className="text-white/60 text-sm">点击下方按钮拍照识别二维码</p>
+           </div>
+-          <div className="absolute bottom-0 left-0 right-0 h-[2px] bg-[#FF9D76] shadow-[0_0_15px_#FF9D76] rounded-full" />
+-        </motion.div>
++          <button
++            onClick={() => handleNativeScan('camera')}
++            className="w-32 h-32 rounded-full bg-[#FF9D76]/20 border-4 border-[#FF9D76]/40 flex items-center justify-center text-[#FF9D76] active:scale-90 transition-all shadow-2xl shadow-[#FF9D76]/20"
++          >
++            <Camera size={48} strokeWidth={1.5} />
++          </button>
++        </div>
++      )}
+ 
+-        <div className="absolute w-full text-center bottom-[20%]">
+-          <p className="text-white/60 text-[13px] font-medium tracking-widest drop-shadow-[0_2px_4px_rgba(0,0,0,0.5)]">
+-            将二维码/条码放入区域内，即可自动扫描
+-          </p>
++      {!nativeMode && (
++        <div className="absolute inset-0 z-10 pointer-events-none overflow-hidden">
++          <motion.div
++            initial={{ top: "25%", opacity: 0 }}
++            animate={{
++              top: ["25%", "75%"],
++              opacity: [0, 1, 1, 0]
++            }}
++            transition={{
++              duration: 2.2,
++              repeat: Infinity,
++              times: [0, 0.1, 0.9, 1],
++              ease: "linear"
++            }}
++            className="absolute left-[12.5%] right-[12.5%] h-[60px] pointer-events-none"
++          >
++            {/* 支付宝式网格光晕 (Advanced Grid Glow Effect) */}
++            <div className="absolute inset-0 overflow-hidden">
++              <div
++                className="absolute inset-0 bg-gradient-to-t from-[#FF9D76]/60 to-transparent"
++                style={{
++                  backgroundImage: `
++                    linear-gradient(to top, rgba(255,157,118,0.6), transparent),
++                    linear-gradient(to right, rgba(255,157,118,0.25) 1px, transparent 1px),
++                    linear-gradient(to bottom, rgba(255,157,118,0.25) 1px, transparent 1px)
++                  `,
++                  backgroundSize: '100% 100%, 2px 2px, 2px 2px'
++                }}
++              />
++            </div>
++            <div className="absolute bottom-0 left-0 right-0 h-[2px] bg-[#FF9D76] shadow-[0_0_15px_#FF9D76] rounded-full" />
++          </motion.div>
++
++          <div className="absolute w-full text-center bottom-[20%]">
++            <p className="text-white/60 text-[13px] font-medium tracking-widest drop-shadow-[0_2px_4px_rgba(0,0,0,0.5)]">
++              将二维码/条码放入区域内，即可自动扫描
++            </p>
++          </div>
+         </div>
+-      </div>
++      )}
+ 
+       <div className="absolute inset-0 z-20 flex flex-col pointer-events-none">
+         <div 
+@@ -322,8 +366,8 @@ export default function ScanFriend() {
+           className="w-full flex justify-center gap-10 items-center pb-16 px-6 pointer-events-auto"
+           style={{ paddingBottom: 'calc(env(safe-area-inset-bottom) + 3rem)' }}
+         >
+-          <button 
+-            onClick={handleAlbumClick}
++          <button
++            onClick={nativeMode ? () => handleNativeScan('gallery') : handleAlbumClick}
+             className="flex flex-col items-center gap-2 group"
+           >
+             <div className="w-14 h-14 rounded-full bg-white/10 backdrop-blur-md border border-white/10 flex items-center justify-center text-white group-active:scale-90 transition-all shadow-lg">
+@@ -331,13 +375,15 @@ export default function ScanFriend() {
+             </div>
+             <span className="text-[10px] font-bold text-white tracking-widest drop-shadow-md">相册</span>
+           </button>
+-          <input 
+-            type="file" 
+-            ref={fileInputRef} 
+-            hidden 
+-            accept="image/*" 
+-            onChange={handleFileChange} 
+-          />
++          {!nativeMode && (
++            <input
++              type="file"
++              ref={fileInputRef}
++              hidden
++              accept="image/*"
++              onChange={handleFileChange}
++            />
++          )}
+ 
+           <button 
+             onClick={async () => {
+@@ -360,15 +406,17 @@ export default function ScanFriend() {
+             <span className="text-[10px] font-bold text-white tracking-widest drop-shadow-md">我的二维码</span>
+           </button>
+ 
+-          <button 
+-            onClick={toggleFlash}
+-            className="flex flex-col items-center gap-2 group"
+-          >
+-            <div className={`w-14 h-14 rounded-full backdrop-blur-md border border-white/10 flex items-center justify-center transition-all group-active:scale-90 shadow-lg ${isFlashOn ? 'bg-white text-[#FF9D76]' : 'bg-white/10 text-white'}`}>
+-              <Zap size={24} strokeWidth={1.5} fill={isFlashOn ? "currentColor" : "none"} />
+-            </div>
+-            <span className="text-[10px] font-bold text-white tracking-widest drop-shadow-md">手电筒</span>
+-          </button>
++          {!nativeMode && (
++            <button
++              onClick={toggleFlash}
++              className="flex flex-col items-center gap-2 group"
++            >
++              <div className={`w-14 h-14 rounded-full backdrop-blur-md border border-white/10 flex items-center justify-center transition-all group-active:scale-90 shadow-lg ${isFlashOn ? 'bg-white text-[#FF9D76]' : 'bg-white/10 text-white'}`}>
++                <Zap size={24} strokeWidth={1.5} fill={isFlashOn ? "currentColor" : "none"} />
++              </div>
++              <span className="text-[10px] font-bold text-white tracking-widest drop-shadow-md">手电筒</span>
++            </button>
++          )}
+         </div>
+       </div>
+ 
+diff --git a/src/pages/UploadMaterial.tsx b/src/pages/UploadMaterial.tsx
+index 9dd4c92..35b3af7 100644
+--- a/src/pages/UploadMaterial.tsx
++++ b/src/pages/UploadMaterial.tsx
+@@ -3,6 +3,8 @@ import { useNavigate, useLocation } from "react-router-dom";
+ import { ArrowLeft, Upload, Sparkles, X, Pencil, Check, Maximize2 } from "lucide-react";
+ import { motion, AnimatePresence } from "motion/react";
+ import Cropper from 'react-easy-crop';
++import { isNative } from "../utils/platform";
++import { pickImage } from "../services/cameraService";
+ 
+ export default function UploadMaterial() {
+   const navigate = useNavigate();
+@@ -190,8 +192,15 @@ export default function UploadMaterial() {
+                 </button>
+               </motion.div>
+             ) : (
+-              <button 
+-                onClick={() => fileInputRef.current?.click()}
++              <button
++                onClick={async () => {
++                  if (isNative()) {
++                    const dataUrl = await pickImage('gallery');
++                    if (dataUrl) setImageToCrop(dataUrl);
++                  } else {
++                    fileInputRef.current?.click();
++                  }
++                }}
+                 className="w-full h-full rounded-[40px] border-4 border-dashed border-outline-variant/30 bg-white flex flex-col items-center justify-center gap-4 active:scale-[0.98] transition-all group"
+               >
+                 <div className="w-20 h-20 bg-primary/5 rounded-full flex items-center justify-center text-primary group-hover:scale-110 transition-transform">
+diff --git a/src/services/nativeStorage.ts b/src/services/nativeStorage.ts
+new file mode 100644
+index 0000000..8f4a149
+--- /dev/null
++++ b/src/services/nativeStorage.ts
+@@ -0,0 +1,48 @@
++import { isNative } from '../utils/platform';
++
++/**
++ * 原生安全存储适配层
++ * 原生环境使用 Capacitor Preferences（独立于 WebView，不会被清除）
++ * Web 环境回退到 localStorage
++ *
++ * 仅用于关键数据（auth token、当前用户信息）
++ * 批量数据（日记、猫咪列表等）仍使用 localStorage（WebView 中性能更好）
++ */
++
++let preferencesModule: typeof import('@capacitor/preferences') | null = null;
++
++async function getPreferences() {
++  if (!isNative()) return null;
++  if (!preferencesModule) {
++    preferencesModule = await import('@capacitor/preferences');
++  }
++  return preferencesModule.Preferences;
++}
++
++export const nativeStorage = {
++  async getItem(key: string): Promise<string | null> {
++    const Preferences = await getPreferences();
++    if (Preferences) {
++      const { value } = await Preferences.get({ key });
++      return value;
++    }
++    return localStorage.getItem(key);
++  },
++
++  async setItem(key: string, value: string): Promise<void> {
++    const Preferences = await getPreferences();
++    if (Preferences) {
++      await Preferences.set({ key, value });
++    }
++    // 同时写入 localStorage 保持同步（WebView 中的代码也能读到）
++    try { localStorage.setItem(key, value); } catch {}
++  },
++
++  async removeItem(key: string): Promise<void> {
++    const Preferences = await getPreferences();
++    if (Preferences) {
++      await Preferences.remove({ key });
++    }
++    try { localStorage.removeItem(key); } catch {}
++  },
++};
+diff --git a/src/services/scannerService.ts b/src/services/scannerService.ts
+index 97074a7..bd827a5 100644
+--- a/src/services/scannerService.ts
++++ b/src/services/scannerService.ts
+@@ -2,10 +2,10 @@ import { isNative } from '../utils/platform';
+ 
+ /**
+  * QR 扫码抽象层
+- * 原生环境使用 Capacitor Camera 插件拍照后解码
++ * 原生环境使用 Capacitor Camera 拍照 + html5-qrcode 解码
+  * Web 环境返回 null，由调用方使用 html5-qrcode 内联扫描
+  */
+-export async function scanQRCode(): Promise<string | null> {
++export async function scanQRFromCamera(): Promise<string | null> {
+   if (!isNative()) return null;
+ 
+   const { Camera, CameraResultType, CameraSource } = await import('@capacitor/camera');
+@@ -15,8 +15,44 @@ export async function scanQRCode(): Promise<string | null> {
+     source: CameraSource.Camera,
+   });
+ 
+-  // 在原生端拍照后返回 dataUrl，由调用方解析 QR 内容
+-  // Phase 1: 原生端暂时仍走 html5-qrcode 的 WebView 实现
+-  // 未来可接入 @capawesome/capacitor-mlkit-barcode-scanning
+-  return photo.dataUrl ?? null;
++  if (!photo.dataUrl) return null;
++
++  // 使用 html5-qrcode 解码拍到的照片
++  const { Html5Qrcode } = await import('html5-qrcode');
++  try {
++    const blob = await fetch(photo.dataUrl).then(r => r.blob());
++    const file = new File([blob], 'scan.jpg', { type: 'image/jpeg' });
++    const html5QrCode = new Html5Qrcode('__qr-decode-tmp', /* verbose= */ false);
++    const decodedText = await html5QrCode.scanFile(file, /* showImage= */ false);
++    return decodedText;
++  } catch {
++    return null; // 未识别到二维码
++  }
++}
++
++/**
++ * 从相册图片解码 QR（原生环境）
++ */
++export async function scanQRFromGallery(): Promise<string | null> {
++  if (!isNative()) return null;
++
++  const { Camera, CameraResultType, CameraSource } = await import('@capacitor/camera');
++  const photo = await Camera.getPhoto({
++    quality: 90,
++    resultType: CameraResultType.DataUrl,
++    source: CameraSource.Photos,
++  });
++
++  if (!photo.dataUrl) return null;
++
++  const { Html5Qrcode } = await import('html5-qrcode');
++  try {
++    const blob = await fetch(photo.dataUrl).then(r => r.blob());
++    const file = new File([blob], 'gallery.jpg', { type: 'image/jpeg' });
++    const html5QrCode = new Html5Qrcode('__qr-decode-tmp', /* verbose= */ false);
++    const decodedText = await html5QrCode.scanFile(file, /* showImage= */ false);
++    return decodedText;
++  } catch {
++    return null;
++  }
+ }
+diff --git a/src/services/storage.ts b/src/services/storage.ts
+index 76b5920..79eda77 100644
+--- a/src/services/storage.ts
++++ b/src/services/storage.ts
+@@ -1,7 +1,11 @@
+ import { mediaStorage } from "./mediaStorage";
++import { nativeStorage } from "./nativeStorage";
++import { isNative } from "../utils/platform";
+ 
+ /**
+  * 本地存储服务，模拟移动端的 SharedPreferences/MMKV
++ * 原生环境下，auth token 和当前用户信息额外写入 Capacitor Preferences
++ * 确保 WebView 缓存被清除时不丢失登录态
+  */
+ 
+ export interface UserInfo {
+@@ -148,6 +152,32 @@ const MAX_DIARIES = 200;
+ const MAX_FRIEND_DIARIES = 100;
+ const MAX_TIME_LETTERS = 100;
+ 
++// ---- 原生存储关键 key（仅 auth token + 当前用户同步到 Capacitor Preferences）----
++const NATIVE_KEYS = [STORAGE_KEYS.TOKEN, STORAGE_KEYS.CURRENT_USER, STORAGE_KEYS.LAST_USERNAME] as const;
++
++/** 启动时从 Capacitor Preferences 恢复关键数据到 localStorage（WebView 缓存可能被系统清除） */
++export async function initNativeStorage(): Promise<void> {
++  if (!isNative()) return;
++  for (const key of NATIVE_KEYS) {
++    const value = await nativeStorage.getItem(key);
++    if (value !== null) {
++      try { localStorage.setItem(key, value); } catch {}
++    }
++  }
++  // 恢复后刷新内存缓存
++  cachedCurrentUserRaw = null;
++  memCache.clear();
++  refreshUserPrefix();
++}
++
++// fire-and-forget 写入原生存储（不阻塞同步调用链）
++function nativePut(key: string, value: string) {
++  if (isNative()) nativeStorage.setItem(key, value).catch(() => {});
++}
++function nativeDel(key: string) {
++  if (isNative()) nativeStorage.removeItem(key).catch(() => {});
++}
++
+ // 内部缓存，减少频繁的 JSON.parse
+ let cachedUserPrefix: string = 'guest';
+ let cachedCurrentUserRaw: string | null = null;
+@@ -330,14 +360,18 @@ export const storage = {
+   // 用户管理
+   saveUserInfo: (info: UserInfo) => {
+     // 1. 保存到当前登录用户
+-    storage.setItem(STORAGE_KEYS.CURRENT_USER, JSON.stringify(info));
++    const infoJson = JSON.stringify(info);
++    storage.setItem(STORAGE_KEYS.CURRENT_USER, infoJson);
+     invalidateCache(STORAGE_KEYS.CURRENT_USER);
+     storage.setItem(STORAGE_KEYS.LAST_USERNAME, info.username);
+ 
++    // 同步到原生存储（防止 WebView 缓存丢失）
++    nativePut(STORAGE_KEYS.CURRENT_USER, infoJson);
++    nativePut(STORAGE_KEYS.LAST_USERNAME, info.username);
++
+     // 刷新前缀缓存
+     refreshUserPrefix();
+ 
+-    
+     // 2. 保存到用户列表（模拟数据库）
+     const users = storage.safeParse<UserInfo[]>(STORAGE_KEYS.USERS, []);
+     const index = users.findIndex(u => u.username === info.username);
+@@ -394,8 +428,9 @@ export const storage = {
+   
+   saveToken: (token: string) => {
+     storage.setItem(STORAGE_KEYS.TOKEN, token);
++    nativePut(STORAGE_KEYS.TOKEN, token);
+   },
+-  
++
+   getToken: () => {
+     try {
+       return localStorage.getItem(STORAGE_KEYS.TOKEN);
+@@ -403,9 +438,10 @@ export const storage = {
+       return null;
+     }
+   },
+-  
++
+   removeToken: () => {
+     storage.removeItem(STORAGE_KEYS.TOKEN);
++    nativeDel(STORAGE_KEYS.TOKEN);
+   },
+ 
+   saveLoginTime: (time: number) => {
+@@ -432,6 +468,9 @@ export const storage = {
+     storage.removeItem(STORAGE_KEYS.TOKEN);
+     localStorage.removeItem('miao_login_time');
+     localStorage.removeItem('miao_last_active_time');
++    // 同步清除原生存储
++    nativeDel(STORAGE_KEYS.CURRENT_USER);
++    nativeDel(STORAGE_KEYS.TOKEN);
+     refreshUserPrefix();
+   },
+   
+diff --git a/src/utils/nativeInit.ts b/src/utils/nativeInit.ts
+index 7655cfe..a991a7a 100644
+--- a/src/utils/nativeInit.ts
++++ b/src/utils/nativeInit.ts
+@@ -1,8 +1,12 @@
+ import { isNative, isIOS } from './platform';
++import { initNativeStorage } from '../services/storage';
+ 
+ export async function initNativePlugins() {
+   if (!isNative()) return;
+ 
++  // 先从 Capacitor Preferences 恢复 auth 数据到 localStorage
++  await initNativeStorage();
++
+   const { StatusBar, Style } = await import('@capacitor/status-bar');
+   const { SplashScreen } = await import('@capacitor/splash-screen');
+ 
+-- 
+2.53.0.windows.1
+
