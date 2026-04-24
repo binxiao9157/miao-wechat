@@ -68,7 +68,7 @@ export default function DownloadPage() {
           animate={{ opacity: 1, y: 0 }}
           className="flex items-center gap-2 mb-6 group"
         >
-          <PawLogo className="-rotate-12" size={32} />
+          <PawLogo className="-rotate-12" size={36} />
           <span className="text-3xl font-black bg-gradient-to-r from-[#5D4037] to-primary bg-clip-text text-transparent tracking-tighter">
             Miao
           </span>
