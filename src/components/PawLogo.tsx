@@ -1,4 +1,4 @@
-import React from "react";
+import React from 'react';
 
 interface PawLogoProps {
   size?: number;
@@ -6,14 +6,16 @@ interface PawLogoProps {
   id?: string;
 }
 
-export default function PawLogo({ size = 48, className = "", id }: PawLogoProps) {
+export default function PawLogo({ size = 48, className = "", id = "paw-logo" }: PawLogoProps) {
   return (
     <img
+      id={id}
       src="/logo.png"
+      alt="Miao Logo"
       width={size}
       height={size}
-      className={className}
-      alt="logo"
+      className={`${className} object-contain`}
+      draggable={false}
     />
   );
 }
