@@ -427,7 +427,7 @@ iPhone 17 上"上传猫咪素材"页面（UploadMaterial）上传图片并填写
 
 ---
 
-## 修复覆盖更新（含 Patch 1-14）
+## 修复覆盖更新（含 Patch 1-15）
 
 | 风险 | Patch | 状态 |
 |------|-------|------|
@@ -444,3 +444,6 @@ iPhone 17 上"上传猫咪素材"页面（UploadMaterial）上传图片并填写
 | **页面 chunk 加载失败白屏** | **Patch 12** | **已解决** |
 | **全部页面 min-h-dvh → h-dvh** | **Patch 13** | **已解决** |
 | **上传素材页嵌套 flex-grow 滚动失效** | **Patch 14** | **已解决** |
+| **跨 PWA 实例登录失败** | **Patch 15** | **已解决** |
+
+> Patch 15 详见：[cross-pwa-login-fix.md](cross-pwa-login-fix.md)
