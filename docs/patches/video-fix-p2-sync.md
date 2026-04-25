@@ -36,7 +36,7 @@ git apply docs/patches/video-fix-patch6.patch
 **文件**：`video-fix-patch4.patch` / `video-fix-patch4.txt`
 
 **修改文件**：
-- `server.ts` — 新增 JSON 文件数据库 + 5 个 API 接口
+- `server.ts` — 新增 JSON 文件数据库 + 6 个 API 接口
 - `.gitignore` — 新增 `data/` 和 `uploads/` 排除
 
 **新增接口**：
