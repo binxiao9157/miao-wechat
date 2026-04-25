@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, ChangeEvent, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { createPortal } from "react-dom";
-import { Plus, Heart, MessageCircle, Share2, Image as ImageIcon, Video, X, Send, Sparkles, Trash2, CheckCircle, Loader2, ArrowUpRight, UserPlus, QrCode } from "lucide-react";
+import { Plus, Heart, MessageCircle, Share2, Image as ImageIcon, Video, X, Send, Sparkles, Trash2, CheckCircle, Loader2, ArrowUpRight, UserPlus, QrCode, Search } from "lucide-react";
 import { storage, DiaryEntry, CatInfo, FriendDiaryEntry } from "../services/storage";
 import { motion, AnimatePresence, LayoutGroup } from "motion/react";
 import { useAuthContext } from "../context/AuthContext";
@@ -10,6 +10,9 @@ import { shareService } from "../services/shareService";
 import PageHeader from "../components/PageHeader";
 import { mediaStorage } from "../services/mediaStorage";
 import { mockFriendService } from "../services/mockFriendService";
+import { PrivateMessageShare } from "../components/PrivateMessageShare";
+import CommentInput from "../components/CommentInput";
+import { ShareSheet } from "../components/ShareSheet";
 
 export default function Diary() {
   const { user } = useAuthContext();
@@ -18,6 +21,7 @@ export default function Diary() {
   const [isPosting, setIsPosting] = useState(false);
   const [sharingEntry, setSharingEntry] = useState<DiaryEntry | null>(null);
   const [showWeChatGuide, setShowWeChatGuide] = useState(false);
+  const [showPrivateShare, setShowPrivateShare] = useState(false);
   const [newContent, setNewContent] = useState("");
   const [selectedMedia, setSelectedMedia] = useState<{ url: string; type: 'image' | 'video'; file?: File } | null>(null);
   const [commentingId, setCommentingId] = useState<string | null>(null);
@@ -371,6 +375,19 @@ export default function Diary() {
     }
   };
 
+  const handlePrivateShare = () => {
+    setShowPrivateShare(true);
+  };
+
+  const onSendPrivateMessage = (userIds: string[], msg: string) => {
+    console.log('Sending message to:', userIds, 'message:', msg);
+    // 这里未来可以调用 API 发送私信
+    setSharingEntry(null);
+    setShareMessage("已成功私信给好友！");
+    setShowShareToast(true);
+    setTimeout(() => setShowShareToast(false), 3000);
+  };
+
   return (
     <div className="flex flex-col h-full overflow-y-auto no-scrollbar">
       <PageHeader 
@@ -513,7 +530,7 @@ export default function Diary() {
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
                 exit={{ opacity: 0 }}
-                className="fixed inset-0 z-[100] bg-black/60 backdrop-blur-md flex items-end sm:items-center justify-center sm:p-6"
+                className="backdrop-overlay !z-[450] flex items-end sm:items-center justify-center sm:p-6"
                 onClick={closePostingModal}
               >
                 <motion.div 
@@ -639,7 +656,7 @@ export default function Diary() {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="fixed inset-0 z-[150] bg-black/60 backdrop-blur-md flex items-end justify-center sm:p-6"
+            className="backdrop-overlay !z-[110] !bg-black/60 flex items-end justify-center sm:p-6 pb-[10vh]"
             onClick={() => {
               setShowAddFriendMenu(false);
               setAddFriendStep(1);
@@ -694,24 +711,9 @@ export default function Diary() {
                     <button 
                       onClick={() => {
                         setShowAddFriendMenu(false);
-                        setAddFriendStep(1);
-                        handleWechatInvite();
-                      }}
-                      className="flex flex-col items-center gap-3 group"
-                    >
-                      <div className="w-16 h-16 bg-[#07C160] rounded-3xl flex items-center justify-center text-white shadow-lg shadow-green-500/20 active:scale-90 transition-all">
-                        <MessageCircle size={32} fill="currentColor" />
-                      </div>
-                      <span className="text-sm font-bold text-on-surface">微信邀请</span>
-                    </button>
-
-                    <button 
-                      onClick={() => {
-                        setShowAddFriendMenu(false);
-                        // 延迟跳转，确保 AnimatePresence 退出动画执行完毕，防止路由切换时的状态机冲突
                         setTimeout(() => {
-                          setAddFriendStep(1);
-                          navigate("/add-friend-qr", { state: { cat: selectedCatForQR } });
+                            setAddFriendStep(1);
+                            navigate("/add-friend-qr", { state: { cat: selectedCatForQR } });
                         }, 300);
                       }}
                       className="flex flex-col items-center gap-3 group"
@@ -736,159 +738,85 @@ export default function Diary() {
         )}
       </AnimatePresence>
 
-      {/* 微信分享菜单 */}
-      <AnimatePresence>
-        {sharingEntry && (
-          <motion.div 
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="fixed inset-0 z-[110] bg-black/60 backdrop-blur-sm flex items-end justify-center p-4"
-            onClick={() => setSharingEntry(null)}
-          >
-            <motion.div 
-              initial={{ y: "100%" }}
-              animate={{ y: 0 }}
-              exit={{ y: "100%" }}
-              className="bg-background w-full max-w-lg rounded-[40px] p-8 pb-12 shadow-2xl"
-              onClick={e => e.stopPropagation()}
-            >
-              <div className="text-center mb-10">
-                <h3 className="text-xl font-black text-on-surface">分享至微信</h3>
-                <p className="text-[10px] text-on-surface-variant font-bold uppercase tracking-widest mt-1">Share to WeChat</p>
-              </div>
+      {/* 分享面板 (重构为独立组件) */}
+      <ShareSheet 
+        isOpen={!!sharingEntry}
+        onClose={() => setSharingEntry(null)}
+        diaryData={sharingEntry ? {
+            id: sharingEntry.id,
+            title: sharingEntry.content,
+            imageUrl: sharingEntry.media || 'https://images.unsplash.com/photo-1514888286974-6c03e2ca1dba?q=80&w=2643&auto=format&fit=crop',
+            authorName: user?.nickname || '猫咪主人',
+            authorAvatar: user?.avatar || 'https://api.dicebear.com/7.x/avataaars/svg?seed=Felix'
+        } : null}
+        onPrivateShare={handlePrivateShare}
+        onToast={(msg) => {
+            setShareMessage(msg);
+            setShowShareToast(true);
+            setTimeout(() => setShowShareToast(false), 3000);
+        }}
+      />
 
-              <div className="grid grid-cols-2 gap-8">
-                <button 
-                  onClick={handleShareAction}
-                  className="flex flex-col items-center gap-3 group"
-                >
-                  <div className="w-16 h-16 bg-[#07C160] rounded-3xl flex items-center justify-center text-white shadow-lg shadow-green-500/20 active:scale-90 transition-all">
-                    <MessageCircle size={32} fill="currentColor" />
-                  </div>
-                  <span className="text-sm font-bold text-on-surface">微信好友</span>
-                </button>
+      {/* 站内私信分享二级页面 */}
+      <PrivateMessageShare 
+        isOpen={showPrivateShare}
+        onClose={() => setShowPrivateShare(false)}
+        diaryData={sharingEntry ? {
+          id: sharingEntry.id,
+          title: sharingEntry.content.substring(0, 20) + (sharingEntry.content.length > 20 ? '...' : ''),
+          imageUrl: (sharingEntry.mediaType === 'image' && sharingEntry.media) ? sharingEntry.media : 'https://images.unsplash.com/photo-1514888286974-6c03e2ca1dba?q=80&w=2643&auto=format&fit=crop'
+        } : { id: '', title: '', imageUrl: '' }}
+        onSend={onSendPrivateMessage}
+      />
 
-                <button 
-                  onClick={handleShareAction}
-                  className="flex flex-col items-center gap-3 group"
-                >
-                  <div className="w-16 h-16 bg-gradient-to-br from-[#07C160] to-[#00B050] rounded-3xl flex items-center justify-center text-white shadow-lg shadow-green-500/20 active:scale-90 transition-all">
-                    <div className="relative">
-                      <Sparkles size={32} />
-                    </div>
-                  </div>
-                  <span className="text-sm font-bold text-on-surface">朋友圈</span>
-                </button>
-              </div>
-
-              <button 
-                onClick={() => setSharingEntry(null)}
-                className="w-full mt-12 py-4 bg-surface-container text-on-surface-variant rounded-2xl font-black active:scale-95 transition-all"
-              >
-                取消
-              </button>
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
+      {/* 评论输入组件 */}
+      <CommentInput
+        isOpen={!!commentingId}
+        value={commentText}
+        onChange={setCommentText}
+        onSend={() => handleComment(commentingId!)}
+        onClose={() => setCommentingId(null)}
+        maxLength={MAX_COMMENT_LENGTH}
+      />
 
       {/* 微信分享引导 */}
-      <AnimatePresence>
-        {showWeChatGuide && (
-          <motion.div 
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="fixed inset-0 z-[200] bg-black/80 backdrop-blur-sm flex flex-col items-end p-8"
-            onClick={() => setShowWeChatGuide(false)}
-          >
-            <div className="flex flex-col items-end text-white">
-              <motion.div
-                animate={{ y: [0, -10, 0] }}
-                transition={{ repeat: Infinity, duration: 1.5 }}
-                className="mb-4"
-              >
-                <ArrowUpRight size={64} className="text-primary" />
-              </motion.div>
-              <h3 className="text-2xl font-black mb-2">点击右上角分享</h3>
-              <p className="text-lg opacity-80">点击右上角的三个点 <span className="font-bold">···</span></p>
-              <p className="text-lg opacity-80">选择分享给好友或朋友圈</p>
-            </div>
-            
-            <div className="mt-auto w-full text-center">
-              <button 
+          <AnimatePresence>
+            {showWeChatGuide && (
+              <motion.div 
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                className="backdrop-overlay !z-[500] !bg-black/90 flex flex-col items-end p-8"
                 onClick={() => setShowWeChatGuide(false)}
-                className="px-12 py-4 bg-white/10 border border-white/20 rounded-full text-white font-black backdrop-blur-md active:scale-95 transition-all"
               >
-                我知道了
-              </button>
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
+                <div className="flex flex-col items-end text-white mt-[10vh]">
+                  <motion.div
+                    animate={{ y: [0, -15, 0] }}
+                    transition={{ repeat: Infinity, duration: 2, ease: "easeInOut" }}
+                    className="mb-6 mr-4"
+                  >
+                    <ArrowUpRight size={80} className="text-primary filter drop-shadow(0 0 20px rgba(232, 159, 113, 0.4))" />
+                  </motion.div>
+                  <div className="text-right space-y-2">
+                    <h3 className="text-3xl font-black">点击右上角分享</h3>
+                    <p className="text-xl opacity-80">点击右上角的三个点 <span className="inline-block px-2 py-0.5 bg-white/20 rounded-md font-bold">···</span></p>
+                    <p className="text-xl opacity-80">选择分享给好友或朋友圈</p>
+                  </div>
+                </div>
+                
+                <div className="mt-auto w-full text-center pb-8">
+                  <button 
+                    onClick={() => setShowWeChatGuide(false)}
+                    className="px-16 py-5 bg-primary text-white rounded-full font-black shadow-2xl active:scale-95 transition-all text-xl"
+                  >
+                    我知道了
+                  </button>
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
 
-      {/* 评论弹窗 */}
-      <AnimatePresence>
-        {commentingId && (
-          <motion.div 
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="fixed inset-0 z-[150] bg-black/20 backdrop-blur-[2px] flex items-end justify-center p-4"
-            onClick={() => setCommentingId(null)}
-          >
-            <motion.div 
-              initial={{ y: 100 }}
-              animate={{ y: 0 }}
-              exit={{ y: 100 }}
-              transition={{ type: "spring", damping: 25, stiffness: 300 }}
-              className="bg-primary-container/90 backdrop-blur-xl w-full max-w-lg rounded-[32px] p-2 pl-6 flex items-center gap-3 shadow-2xl border border-primary/10"
-              style={{ 
-                marginBottom: keyboardHeight > 0 ? `${keyboardHeight}px` : 'env(safe-area-inset-bottom)',
-                transition: 'margin-bottom 0.2s ease-out'
-              }}
-              onClick={e => e.stopPropagation()}
-            >
-              <div className="flex-grow relative flex items-end">
-                <textarea 
-                  autoFocus
-                  rows={1}
-                  value={commentText}
-                  onChange={e => {
-                    setCommentText(e.target.value.slice(0, MAX_COMMENT_LENGTH));
-                    // 简单的自动高度调整
-                    e.target.style.height = 'auto';
-                    e.target.style.height = e.target.scrollHeight + 'px';
-                  }}
-                  placeholder="发表你的温暖评论..."
-                  className="w-full py-4 bg-transparent border-none outline-none text-on-primary-container font-bold placeholder:text-on-primary-container/30 pr-12 resize-none max-h-32 custom-scrollbar"
-                  onKeyDown={e => {
-                    if (e.key === 'Enter' && !e.shiftKey) {
-                      e.preventDefault();
-                      handleComment(commentingId);
-                    }
-                  }}
-                />
-                <span className={`absolute right-0 bottom-4 text-[10px] font-black transition-colors ${
-                  commentText.length >= MAX_COMMENT_LENGTH ? 'text-red-500' : 'text-on-primary-container/30'
-                }`}>
-                  {commentText.length}/{MAX_COMMENT_LENGTH}
-                </span>
-              </div>
-              <button 
-                onClick={() => handleComment(commentingId)}
-                disabled={!commentText.trim() || commentText.length > MAX_COMMENT_LENGTH}
-                className="w-12 h-12 bg-primary text-white rounded-2xl flex items-center justify-center active:scale-90 transition-all shadow-lg shadow-primary/20 disabled:opacity-30"
-              >
-                <Send size={20} />
-              </button>
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-      {/* 删除确认弹窗 */}
+          {/* 删除确认弹窗 */}
       <AnimatePresence>
         {deletingId && (
           <motion.div 

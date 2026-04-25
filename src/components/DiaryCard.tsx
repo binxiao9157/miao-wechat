@@ -179,13 +179,13 @@ const DiaryCard: React.FC<DiaryCardProps> = ({
 
         {/* 评论列表 */}
         {entry.comments.length > 0 && (
-          <div className="mt-6 pt-6 border-t border-outline-variant/30 space-y-3">
+          <div className="mt-3 p-2 bg-[#FDF8F5]/80 rounded-xl space-y-0.5">
             {entry.comments.map((comment) => (
-              <div key={comment.id}>
+              <div key={comment.id} className="last:mb-0">
                 {isFriend ? (
-                  <div className="flex gap-2">
-                    <span className="text-xs font-black text-secondary shrink-0">好友:</span>
-                    <p className="text-xs text-on-surface-variant font-medium">{comment.content}</p>
+                  <div className="flex gap-1.5 px-1.5 py-0.5">
+                    <span className="text-[12px] font-black text-[#633E1D] shrink-0">好友:</span>
+                    <p className="text-[12px] text-on-surface-variant/90 font-medium leading-[1.4]">{comment.content}</p>
                   </div>
                 ) : (
                   <CommentItem

@@ -7,6 +7,7 @@ import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import InstallPromptBanner from "../components/InstallPromptBanner";
 import PageHeader from "../components/PageHeader";
+import AdminPresetConfig from "../components/AdminPresetConfig";
 
 export default function Profile() {
   const navigate = useNavigate();
@@ -111,7 +112,7 @@ export default function Profile() {
   };
 
   return (
-    <div className="flex flex-col h-full overflow-y-auto no-scrollbar">
+    <div className="flex flex-col w-full min-h-full bg-gradient-to-b from-[#FFF9F5] to-[#FFE8D6]">
       <PageHeader 
         title="Miao" 
         subtitle="MIAO SANCTUARY" 
@@ -138,9 +139,10 @@ export default function Profile() {
         }
       />
 
-      <div className="px-6 pb-6 flex flex-col shrink-0 overflow-visible">
-        <div className="flex-grow">
+      <div className="px-6 pb-6 flex flex-col items-stretch overflow-visible">
+        <div className="w-full">
           <InstallPromptBanner />
+        </div>
         <section className="flex flex-col items-center mb-10">
           <div className="relative mb-4 group">
             <div className="w-28 h-28 rounded-full p-1 bg-gradient-to-tr from-primary to-secondary shadow-xl overflow-hidden">
@@ -355,9 +357,6 @@ export default function Profile() {
           <AdminPresetConfig onClose={() => setShowAdmin(false)} />
         )}
       </AnimatePresence>
-      </div>
     </div>
   );
 }
-
-import AdminPresetConfig from "../components/AdminPresetConfig";

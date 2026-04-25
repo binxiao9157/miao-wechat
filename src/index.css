@@ -6,7 +6,7 @@
   --color-primary: #E89F71;
   --color-primary-container: #FDF2E9;
   --color-on-primary-container: #633E1D;
-  --color-background: #FFF5F0;
+  --color-background: #FFF9F5;
   --color-surface: #FFFFFF;
   --color-surface-container: #FEF6F0;
   --color-surface-container-low: #FFFBF8;
@@ -26,9 +26,7 @@
   }
   html {
     @apply w-full h-full;
-    /* 阻止 iOS 橡皮筋回弹效果，确保全屏体验 */
     overscroll-behavior: none;
-    /* 优化移动端点击延迟 */
     touch-action: manipulation;
   }
   body, #root {
@@ -36,21 +34,16 @@
     -webkit-font-smoothing: antialiased;
     margin: 0;
     padding: 0;
-    overflow-y: auto;
-    overflow-x: hidden;
-    /* 确保内容能够填充整个视口，包括刘海屏区域 */
+    overflow: hidden;
     position: fixed;
     top: 0;
     left: 0;
     right: 0;
     bottom: 0;
-
     /* 彻底禁用长按选词功能 */
-    -webkit-user-select: none; /* Safari/iOS */
-    -moz-user-select: none;    /* Firefox */
-    -ms-user-select: none;     /* IE10+/Edge */
-    user-select: none;         /* Standard */
-    -webkit-touch-callout: none; /* iOS Safari 禁用长按弹出菜单 */
+    -webkit-user-select: none;
+    user-select: none;
+    -webkit-touch-callout: none;
   }
   input, textarea {
     -webkit-user-select: auto;
@@ -91,14 +84,22 @@
 
   /* 全屏沉浸式组件需要忽略安全区 */
   .edge-to-edge {
-    position: fixed;
-    top: 0;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    padding: 0 !important;
-    margin: 0 !important;
-    z-index: 0;
+    @apply fixed inset-0 z-[1000];
+    top: -100px !important;
+    bottom: -100px !important;
+    padding-top: 100px !important;
+    padding-bottom: 100px !important;
+  }
+
+  .backdrop-overlay {
+    @apply fixed z-[300] bg-black/80 backdrop-blur-md flex;
+    /* 通过负值延伸覆盖范围到视口外（如 iOS 状态栏区） */
+    top: -100px;
+    bottom: -100px;
+    left: -100px;
+    right: -100px;
+    /* 通过内边距补偿，使内部 flex 布局依然对齐于视口边界 */
+    padding: 100px;
   }
 
   /* 隐藏原生视频控件 */
