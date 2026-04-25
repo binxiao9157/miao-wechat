@@ -15,6 +15,10 @@ async function persistVideoUrl(url: string, catId: string, action: string): Prom
   }
 }
 
+/**
+ * 压缩 base64 图片为缩略图，降低 localStorage 占用
+ * 非 base64 数据（URL 等）原样返回
+ */
 function compressForStorage(base64: string | undefined, maxSize: number, quality: number): Promise<string | undefined> {
   if (!base64 || !base64.startsWith('data:image')) return Promise.resolve(base64);
   return new Promise((resolve) => {

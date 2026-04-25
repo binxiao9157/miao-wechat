@@ -285,6 +285,7 @@ export const storage = {
     }
   },
 
+  // Prune storage to free up space
   pruneStorage: () => {
     try {
       const allKeys: string[] = [];

@@ -151,7 +151,7 @@ export default function UploadMaterial() {
 
   return (
     <div 
-      className="min-h-screen bg-[#FFF9F5] px-6 pb-6 flex flex-col font-sans" 
+      className="min-h-dvh bg-[#FFF9F5] px-6 pb-6 flex flex-col font-sans" 
       onClick={() => (document.activeElement as HTMLElement)?.blur()}
       style={{ paddingTop: 'calc(env(safe-area-inset-top) + 1.5rem)' }}
     >
@@ -171,7 +171,7 @@ export default function UploadMaterial() {
 
         <div className="flex-grow flex flex-col items-center justify-start space-y-8">
           {/* 图片预览区 */}
-          <div className="w-full aspect-square relative">
+          <div className="w-full max-h-[45dvh] aspect-square relative">
             {selectedImage ? (
               <motion.div 
                 initial={{ scale: 0.9, opacity: 0 }}

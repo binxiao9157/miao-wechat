@@ -38,7 +38,7 @@ export default function PrivacySettings() {
   };
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-dvh bg-background">
       <AnimatePresence>
         {showToast && (
           <motion.div 

@@ -26,7 +26,7 @@ export default function JoinFriend() {
 
   if (!uid) {
     return (
-      <div className="min-h-screen bg-[#FFF5F0] flex flex-col items-center justify-center p-6 text-center">
+      <div className="min-h-dvh bg-[#FFF5F0] flex flex-col items-center justify-center p-6 text-center">
         <AlertCircle size={48} className="text-on-surface-variant/30 mb-4" />
         <h2 className="text-xl font-black text-on-surface mb-2">链接无效</h2>
         <p className="text-sm text-on-surface-variant mb-8">该邀请链接缺少必要参数</p>
@@ -61,7 +61,7 @@ export default function JoinFriend() {
   };
 
   return (
-    <div className="min-h-screen bg-[#FFF5F0] flex flex-col items-center justify-center p-6">
+    <div className="min-h-dvh bg-[#FFF5F0] flex flex-col items-center justify-center p-6">
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
