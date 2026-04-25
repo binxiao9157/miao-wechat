@@ -1,7 +1,7 @@
 # UI 屏幕适配修复 — Patch 汇总
 
 > 日期：2026-04-25
-> 共 7 个 Patch（编号 7-13，承接 Patch 1-6），按严重度排列
+> 共 8 个 Patch（编号 7-14，承接 Patch 1-6），按严重度排列
 
 ---
 
@@ -28,6 +28,7 @@ git apply docs/patches/ui-responsive-patch10.patch
 git apply docs/patches/ui-responsive-patch11.patch
 git apply docs/patches/ui-responsive-patch12.patch
 git apply docs/patches/ui-responsive-patch13.patch
+git apply docs/patches/ui-responsive-patch14.patch
 ```
 
 ---
@@ -361,7 +362,72 @@ function lazyRetry(importFn: () => Promise<{ default: React.ComponentType<any> }
 
 ---
 
-## 修复覆盖更新（含 Patch 1-13）
+## Patch 14（Critical）：上传素材页嵌套 flex-grow 滚动失效 + 间距优化
+
+**文件**：`ui-responsive-patch14.patch` / `ui-responsive-patch14.txt`
+
+### 问题说明
+
+iPhone 17 上"上传猫咪素材"页面（UploadMaterial）上传图片并填写猫咪名字后，"开始生成数字形象"按钮只显示一半，无法下滑。
+
+**根本原因**：页面存在**两层嵌套 `flex-grow`**：
+
+```
+外层容器 (h-dvh flex flex-col overflow-y-auto)
+  └── 内容包装器 (flex-grow flex-shrink-0 flex flex-col)  ← 第 1 层
+        └── 图片+输入容器 (flex-grow flex flex-col)        ← 第 2 层
+              ├── 图片预览 (max-h-[45dvh] aspect-square)
+              └── 昵称输入框
+        └── 生成按钮
+```
+
+两层 `flex-grow` 导致：
+1. 内容包装器被 flex-grow 撑满容器（= 100dvh - header）
+2. 图片+输入容器也被 flex-grow 撑满内容包装器
+3. 子元素被 **flex-shrink 压缩** 来适配容器，而非溢出触发滚动
+4. 即使内容超出视口，`overflow-y-auto` 也永远不会触发
+
+**附加问题**：间距过大（`space-y-8`=32px、`mb-6`=24px、`mt-8`=32px）+ 图片占 45dvh，在 iPhone 17 上恰好将按钮推出视口。
+
+### 修改文件（1 个）
+
+**`src/pages/UploadMaterial.tsx`**（6 处）
+
+| 改动 | 原值 | 新值 | 说明 |
+|------|------|------|------|
+| Header | `mb-6` | `mb-4 flex-shrink-0` | 减少间距 + 防止被压缩 |
+| 内容包装器 | `flex-grow flex-shrink-0` | `flex-shrink-0` | **移除 flex-grow**，取自然高度 |
+| 标题区间距 | `mb-6` | `mb-4` | 减少标题底部间距 |
+| 图片+输入容器 | `flex-grow ... space-y-8` | `space-y-4` | **移除 flex-grow** + 间距 32→16px |
+| 图片预览 | `max-h-[45dvh]` | `max-h-[40dvh]` | 缩小 5%，为按钮留出空间 |
+| 按钮区间距 | `mt-8` | `mt-4` | 顶部间距 32→16px |
+
+### iPhone 17 高度对比
+
+| 元素 | 修复前 | 修复后 |
+|------|--------|--------|
+| safe-area + padding | 83px | 83px |
+| Header + 间距 | 64px | 52px |
+| 标题区 + 间距 | 112px | 96px |
+| 图片预览 | 393px (45dvh) | 350px (40dvh) |
+| 间距 | 32px | 16px |
+| 输入框 | 56px | 56px |
+| 按钮区间距 | 32px | 16px |
+| 按钮 | 56px | 56px |
+| 底部填充 | 40px | 40px |
+| **总计** | **~868px** | **~765px** |
+| **iPhone 17 视口** | **~874px** | **~874px** |
+| **结果** | 边界溢出，按钮被截 | **充裕 109px，按钮完整可见** |
+
+### 验证方式
+
+1. **iPhone 17**：上传图片 + 填写猫咪名字 → "开始生成数字形象"按钮完整可见
+2. **iPhone SE (375×667)**：内容超出视口时可正常滚动，按钮可滚动到达
+3. **大屏设备 (iPhone 14 Pro Max)**：布局正常，间距自然
+
+---
+
+## 修复覆盖更新（含 Patch 1-14）
 
 | 风险 | Patch | 状态 |
 |------|-------|------|
@@ -377,3 +443,4 @@ function lazyRetry(importFn: () => Promise<{ default: React.ComponentType<any> }
 | **`min-h-dvh` 滚动失效（根本修复）** | **Patch 11** | **已解决** |
 | **页面 chunk 加载失败白屏** | **Patch 12** | **已解决** |
 | **全部页面 min-h-dvh → h-dvh** | **Patch 13** | **已解决** |
+| **上传素材页嵌套 flex-grow 滚动失效** | **Patch 14** | **已解决** |
