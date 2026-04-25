@@ -1,7 +1,7 @@
 # UI 屏幕适配修复 — Patch 汇总
 
 > 日期：2026-04-25
-> 共 4 个 Patch（编号 7-10，承接 Patch 1-6），按严重度排列
+> 共 7 个 Patch（编号 7-13，承接 Patch 1-6），按严重度排列
 
 ---
 
@@ -25,6 +25,9 @@ git apply docs/patches/ui-responsive-patch7.patch
 git apply docs/patches/ui-responsive-patch8.patch
 git apply docs/patches/ui-responsive-patch9.patch
 git apply docs/patches/ui-responsive-patch10.patch
+git apply docs/patches/ui-responsive-patch11.patch
+git apply docs/patches/ui-responsive-patch12.patch
+git apply docs/patches/ui-responsive-patch13.patch
 ```
 
 ---
@@ -217,7 +220,148 @@ Patch 7-9 修复了 Login、Register、CreateCompanion、EditProfile、UploadMat
 
 ---
 
-## 修复覆盖更新（含 Patch 1-10）
+## Patch 11（Critical）：登录/注册页 `min-h-dvh` → `h-dvh` 滚动根本修复
+
+**文件**：`ui-responsive-patch11.patch` / `ui-responsive-patch11.txt`
+
+### 问题说明
+
+Patch 7-10 为页面添加了 `overflow-y-auto`，但在 Android Vivo X300 等机型上**滚动仍然失效**。
+
+**根本原因**：`#root` 容器是 `position: fixed; inset: 0; overflow: hidden`（固定视口大小，裁剪溢出）。页面使用 `min-h-dvh`（最小高度 100dvh）+ `overflow-y-auto` 时：
+
+1. `min-height` 只设最小高度，不限制最大高度
+2. 内容超出 100dvh 时，容器**跟随内容增长**（比如变成 120dvh）
+3. 容器自身不溢出 → `overflow-y-auto` 永远不触发滚动
+4. `#root` 的 `overflow: hidden` 直接裁剪超出部分 → 用户看到按钮被截断但无法滚动
+
+**修复方案**：`min-h-dvh` → `h-dvh`（`height: 100dvh`，精确高度）。容器固定为视口大小，内容超出时 `overflow-y-auto` 正常触发滚动。
+
+### 修改文件（2 个）
+
+**`src/pages/Login.tsx`**（3 处）
+
+| 改动 | 原值 | 新值 | 说明 |
+|------|------|------|------|
+| 容器高度 | `min-h-dvh` | `h-dvh` | 精确高度，启用滚动 |
+| 内容区 flex | `flex-1` | `flex-shrink-0` | 防止内容被压缩而非滚动 |
+| 页脚 | `py-6 text-center` | `mt-auto flex-shrink-0 py-6 text-center` | 内容短时页脚沉底，长时跟随内容 |
+
+**`src/pages/Register.tsx`**（4 处）
+
+| 改动 | 原值 | 新值 | 说明 |
+|------|------|------|------|
+| 容器高度 | `min-h-dvh` | `h-dvh` | 精确高度，启用滚动 |
+| Header | 无 `flex-shrink-0` | 添加 `flex-shrink-0` | 防止被压缩 |
+| 表单区 | `flex-grow` | `flex-shrink-0` | 防止被压缩而非滚动 |
+| 页脚 | 无 `flex-shrink-0` | 添加 `flex-shrink-0` | 防止被压缩 |
+
+### 技术原理
+
+```
+┌─ #root (position:fixed; overflow:hidden; inset:0) ─┐
+│                                                     │
+│  ┌─ 页面容器 ───────────────────────────────────┐   │
+│  │ min-h-dvh + overflow-y-auto                  │   │
+│  │                                               │   │
+│  │ 内容 120dvh → 容器增长到 120dvh              │   │
+│  │ 容器不溢出 → 不滚动                          │   │
+│  └───────────────── 被 #root 裁剪 ──────────────┘   │
+│                                                     │
+│  ┌─ 页面容器（修复后）──────────────────────────┐   │
+│  │ h-dvh + overflow-y-auto                      │   │
+│  │                                               │   │
+│  │ 内容 120dvh → 容器固定 100dvh                │   │
+│  │ 内容溢出容器 → overflow-y-auto 触发滚动 ✓    │   │
+│  └───────────────────────────────────────────────┘   │
+└─────────────────────────────────────────────────────┘
+```
+
+---
+
+## Patch 12（High）：页面 chunk 加载失败 → ErrorBoundary 白屏修复
+
+**文件**：`ui-responsive-patch12.patch` / `ui-responsive-patch12.txt`
+
+### 问题说明
+
+在 Android PWA 中，点击"注册"按钮时弹出"哎呀，出错了"全屏错误页面。
+
+**根本原因**：所有页面使用 `React.lazy()` 延迟加载。当 JS chunk 加载失败（PWA Service Worker 缓存过期、网络抖动、新版本部署后旧 chunk hash 不存在）时：
+
+1. `lazy(() => import("./pages/Register"))` 返回 rejected Promise
+2. React Suspense **无法处理** rejected Promise（只处理 pending）
+3. 错误传播到最外层 `ErrorBoundary`
+4. 显示"哎呀，出错了"全屏错误，无自动恢复机制
+
+### 修改文件（2 个）
+
+**`src/App.tsx`**（22 处）
+
+| 改动 | 说明 |
+|------|------|
+| 新增 `lazyRetry()` 函数 | 包装 `React.lazy`，首次加载失败后等待 1 秒自动重试一次 |
+| 所有 `lazy()` → `lazyRetry()` | 覆盖全部 22 个延迟加载的页面/组件 |
+
+```typescript
+function lazyRetry(importFn: () => Promise<{ default: React.ComponentType<any> }>) {
+  return lazy(async () => {
+    try {
+      return await importFn();
+    } catch (error) {
+      console.warn('Chunk load failed, retrying...', error);
+      await new Promise(r => setTimeout(r, 1000));
+      return importFn();
+    }
+  });
+}
+```
+
+**`src/components/ErrorBoundary.tsx`**（1 处）
+
+| 改动 | 原值 | 新值 | 说明 |
+|------|------|------|------|
+| 重试逻辑 | `setState({ hasError: false })` | chunk 错误 → `window.location.reload()`；其他错误 → 就地恢复 | chunk 错误必须刷新页面才能重新获取 JS 文件 |
+
+错误类型检测覆盖：`Loading chunk`、`Failed to fetch`、`dynamically imported module`、`ChunkLoadError`。
+
+---
+
+## Patch 13（全量修复）：全部独立页面 `min-h-dvh` → `h-dvh`
+
+**文件**：`ui-responsive-patch13.patch` / `ui-responsive-patch13.txt`
+
+### 修改文件（11 个）
+
+与 Patch 11 相同原理，将所有剩余使用 `min-h-dvh overflow-y-auto` 的页面改为 `h-dvh overflow-y-auto`。
+
+| 文件 | 说明 |
+|------|------|
+| `src/pages/ChangePassword.tsx` | 3 个密码输入框 + 按钮 |
+| `src/pages/EditProfile.tsx` | 头像 + 表单 |
+| `src/pages/UploadMaterial.tsx` | 大图预览 + 输入框 + 按钮（同时添加 `flex-shrink-0`） |
+| `src/pages/CatHistory.tsx` | 猫咪历史网格 |
+| `src/pages/SwitchCompanion.tsx` | 伴侣切换网格 |
+| `src/pages/ResetPassword.tsx` | 手机号 + 验证码 + 新密码 |
+| `src/pages/Welcome.tsx` | 领养入口两张大卡片 |
+| `src/pages/AccompanyMilestonePage.tsx` | 里程碑日历 |
+| `src/pages/GenerationProgress.tsx` | AI 生成进度 |
+| `src/pages/JoinFriend.tsx`（2 处） | 错误态 + 主页面 |
+| `src/pages/Download.tsx` | 下载/安装引导 |
+
+---
+
+## Patch 11-13 验证方式
+
+1. **Android Vivo X300**（用户实机报告的设备）：登录页内容可完整滚动，注册按钮完全可见可点击
+2. **Chrome DevTools**：iPhone SE (375×667) / Pixel 7 (412×915) 模拟，所有页面内容超出视口时可滚动
+3. **点击注册**：从登录页跳转到注册页，无"哎呀出错了"错误
+4. **断网测试**：开启飞行模式后点击注册 → lazyRetry 重试 1 次 → 仍失败时 ErrorBoundary 显示 → 点击"重试"刷新页面
+5. **flex 布局验证**：大屏设备上页脚仍沉底（`mt-auto`），小屏设备上页脚跟随内容滚动
+
+---
+
+## 修复覆盖更新（含 Patch 1-13）
 
 | 风险 | Patch | 状态 |
 |------|-------|------|
@@ -229,4 +373,7 @@ Patch 7-9 修复了 Login、Register、CreateCompanion、EditProfile、UploadMat
 | 登录/注册页面小屏不可达 | Patch 7 | 已解决 |
 | 内容页面溢出不可滚动 | Patch 8 | 已解决 |
 | Android Chrome 100vh 视口溢出 | Patch 9 | 已解决 |
-| 独立页面滚动缺失（全量修复） | **Patch 10** | **已解决** |
+| 独立页面滚动缺失（全量修复） | Patch 10 | 已解决 |
+| **`min-h-dvh` 滚动失效（根本修复）** | **Patch 11** | **已解决** |
+| **页面 chunk 加载失败白屏** | **Patch 12** | **已解决** |
+| **全部页面 min-h-dvh → h-dvh** | **Patch 13** | **已解决** |
