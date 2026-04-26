@@ -1,6 +1,6 @@
 # Miao PWA 腾讯云轻量服务器部署手册
 
-> 最后更新: 2026-04-15
+> 最后更新: 2026-04-26
 
 ---
 
@@ -11,7 +11,7 @@
 | 产品 | 腾讯云轻量应用服务器 |
 | 规格 | 2 核 2G（起步），推荐 2 核 4G |
 | 系统 | Ubuntu 22.04 LTS |
-| 地域 | 北京（靠近火山引擎 API，延迟最低） |
+| 地域 | 北京（靠近阿里灵积 DashScope API，延迟最低） |
 | 带宽 | 5Mbps 或按量计费 |
 | 磁盘 | 40G SSD 系统盘 |
 
@@ -103,25 +103,32 @@ cat > /home/miao/app/.env << 'EOF'
 NODE_ENV=production
 PORT=3000
 
-# ===== 火山引擎（服务端专用，不带 VITE_ 前缀）=====
-VOLC_API_KEY=<your_volc_api_key>
-VOLC_ACCESS_KEY=<your_volc_access_key>
-VOLC_SECRET_KEY=<your_volc_secret_key>
-VOLC_MODEL_ID=doubao-seedance-1-5-pro-251215
-VOLC_T2I_MODEL_ID=doubao-t2i-v2
-VOLC_ENDPOINT=https://ark.cn-beijing.volces.com/api/v3/contents/generations/tasks
+# ===== 阿里百练 / 灵积 DashScope（服务端专用，不带 VITE_ 前缀）=====
+DASHSCOPE_API_KEY=<your_dashscope_api_key>
+DASHSCOPE_BASE_URL=https://dashscope.aliyuncs.com/api/v1
+DASHSCOPE_IMAGE_MODEL=qwen-image-2.0
+DASHSCOPE_VIDEO_MODEL=wan2.2-i2v-flash
 
-# ===== 可选 =====
-# GEMINI_API_KEY=<your_gemini_key>
+# ===== AliCloud AccessKey（备用，如需 OSS 等服务）=====
+ALICLOUD_AK_ID=<your_alicloud_ak_id>
+ALICLOUD_AK_SECRET=<your_alicloud_ak_secret>
 EOF
 
-# 限制 .env 文件权限
+# 限制 .env 文件权限（仅 miao 用户可读写）
 chmod 600 /home/miao/app/.env
 ```
 
-> **安全须知**: 只用不带 `VITE_` 前缀的变量名。带 `VITE_` 前缀的变量会被 Vite 编译到前端 JS 中，暴露给所有用户。server.ts 已支持读取不带前缀的版本。
+> **安全须知**: 只用不带 `VITE_` 前缀的变量名。带 `VITE_` 前缀的变量会被 Vite 编译到前端 JS 中，暴露给所有用户。server.ts 只读取不带前缀的服务端变量。
 >
-> **说明**: `VOLC_ACCESS_KEY` 和 `VOLC_SECRET_KEY` 当前代码暂未使用，预留供后续 STS 签名鉴权等场景使用。
+> **密钥来源**: 阿里百练平台 → [阿里云灵积控制台](https://dashscope.console.aliyun.com/)
+>
+> **模型说明**:
+> | 环境变量 | 模型 ID | 用途 |
+> |---|---|---|
+> | `DASHSCOPE_IMAGE_MODEL` | `qwen-image-2.0` | 图片生成（支持图生图） |
+> | `DASHSCOPE_VIDEO_MODEL` | `wan2.2-i2v-flash` | 图生视频 |
+>
+> 如需更换模型，修改对应环境变量并 `pm2 restart miao` 即可。
 
 ---
 
@@ -720,8 +727,8 @@ cd ~/app
 ### Q: 访问显示 502 Bad Gateway
 A: Node.js 未启动或崩溃。检查 `pm2 status` 和 `pm2 logs miao`。
 
-### Q: API 调用报 "服务器未配置 API Key"
-A: `.env` 文件中 `VOLC_API_KEY` 未生效。确认文件路径正确且 PM2 已重启：`pm2 restart miao`。
+### Q: API 调用报 "DASHSCOPE_API_KEY 环境变量未设置"
+A: `.env` 文件中 `DASHSCOPE_API_KEY` 未生效。确认文件路径正确且 PM2 已重启：`pm2 restart miao`。
 
 ### Q: PWA 无法安装
 A: 必须通过 HTTPS 访问。检查 SSL 证书是否配置成功。
@@ -729,8 +736,11 @@ A: 必须通过 HTTPS 访问。检查 SSL 证书是否配置成功。
 ### Q: 视频生成超时
 A: Nginx 默认 60s 超时。已在配置中设置 `proxy_read_timeout 180s`，若仍不够可调大。
 
+### Q: 从火山引擎迁移到阿里灵积后需要做什么
+A: 1) 更新 `.env` 文件，将 `VOLC_*` 变量替换为 `DASHSCOPE_*` 变量；2) 拉取最新代码 `git pull`；3) 重新构建前端 `npm run build`；4) 重启服务 `pm2 restart miao`。`data/` 和 `uploads/` 中的用户数据不受影响。
+
 ### Q: ICP 备案未完成怎么办
-A: 可临时使用腾讯云香港地域的服务器（无需备案），但到火山引擎 API 的延迟会增加 30-50ms。
+A: 可临时使用腾讯云香港地域的服务器（无需备案），但到阿里灵积 API 的延迟会增加 30-50ms。
 
 ### Q: 裸域名 mmdd10.tech 无法访问
 A: 确认 DNS 中同时添加了 `www.mmdd10.tech` 和 `mmdd10.tech` 的 A 记录，均指向服务器 IP。

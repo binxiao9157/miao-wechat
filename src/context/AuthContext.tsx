@@ -43,13 +43,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     // 1. 先查本地 localStorage
     const users = storage.getAllUsers();
     const savedUser = users.find(u => u.username === username && u.password === password);
-
+    
     if (savedUser) {
       storage.saveUserInfo(savedUser);
       storage.saveToken('mock_token_' + Date.now());
       storage.saveLoginTime(Date.now());
       storage.saveLastActiveTime(Date.now());
-
+      
       setIsAuthenticated(true);
       setUser(savedUser);
 
@@ -59,7 +59,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         body: JSON.stringify({ username, password: savedUser.password }),
       }).catch(() => {});
       storage.syncFromServer(username).then(() => refreshCatStatus());
-
+      
       refreshCatStatus();
       return true;
     }
