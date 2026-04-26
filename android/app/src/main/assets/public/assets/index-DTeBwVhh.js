@@ -1,1 +1,0 @@
-import{r as o}from"./index-CIhqu6h1.js";import"./vendor-motion-C2vm-e0C.js";import"./vendor-router-DinNDjHw.js";import"./vendor-icons-E9RmDlic.js";var t;(function(r){r.Dark="DARK",r.Light="LIGHT",r.Default="DEFAULT"})(t||(t={}));var a;(function(r){r.None="NONE",r.Slide="SLIDE",r.Fade="FADE"})(a||(a={}));const n=o("StatusBar");export{a as Animation,n as StatusBar,t as Style};

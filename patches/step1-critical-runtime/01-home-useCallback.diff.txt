@@ -1,8 +1,0 @@
---- a/src/pages/Home.tsx
-+++ b/src/pages/Home.tsx
-@@ -1,4 +1,4 @@
--import React, { useState, useEffect, useRef, useMemo, TouchEvent, RefObject } from "react";
-+import React, { useState, useEffect, useRef, useMemo, useCallback, TouchEvent, RefObject } from "react";
- import { useNavigate, useLocation } from "react-router-dom";
- import { Coins, RefreshCw, Loader2, AlertCircle, Settings } from "lucide-react";
- import { storage, CatInfo } from "../services/storage";
