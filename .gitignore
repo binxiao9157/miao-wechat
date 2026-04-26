@@ -6,7 +6,3 @@ coverage/
 !.env.example
 data/
 uploads/
-
-# Capacitor native wrappers (removed)
-ios/
-android/
