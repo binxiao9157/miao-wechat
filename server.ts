@@ -458,6 +458,47 @@ async function startServer() {
     }
   });
 
+  // 文件上传版视频生成接口（解决小程序 base64 体积过大问题）
+  app.post("/api/generate-video-file", upload.single('image'), async (req, res) => {
+    if (!req.file) {
+      return res.status(400).json({ error: "缺少图片文件", code: "INVALID_PARAMETER" });
+    }
+    try {
+      const mime = req.file.mimetype || 'image/jpeg';
+      const b64 = req.file.buffer.toString('base64');
+      const image_base64 = `${mime};base64,${b64}`;
+
+      const prompt = req.body?.prompt || "A high quality video of this cat, cinematic lighting, realistic.";
+      const url = `${ARK_BASE_URL}/services/aigc/video-generation/video-synthesis`;
+      const requestBody = {
+        model: req.body?.model || DASHSCOPE_CONFIG.VIDEO_MODEL,
+        input: { img_url: image_base64, prompt }
+      };
+
+      console.log("Submitting generate-video-file to DashScope:", { model: requestBody.model, fileSize: req.file.size });
+
+      const response = await axios.post(url, requestBody, {
+        headers: {
+          'Authorization': `Bearer ${ARK_API_KEY}`,
+          'Content-Type': 'application/json',
+          'X-DashScope-Async': 'enable'
+        },
+        httpsAgent,
+        timeout: 60000
+      });
+
+      const taskId = response.data?.output?.task_id;
+      if (taskId) {
+        res.json({ id: taskId, status: 'pending' });
+      } else {
+        throw new Error("提交视频任务后未获取到 task_id");
+      }
+    } catch (error: any) {
+      console.error("generate-video-file Error:", error.response?.data || error.message);
+      sendError(res, error, "提交视频生成失败");
+    }
+  });
+
   // API Route for Video Generation (DashScope)
   app.post("/api/generate-video", async (req, res) => {
     let { prompt, image_base64 } = req.body;
