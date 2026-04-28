@@ -4,6 +4,7 @@ import fs from "fs";
 import axios from "axios";
 import https from "https";
 import dotenv from "dotenv";
+import multer from "multer";
 import { fileURLToPath } from 'url';
 
 dotenv.config();
@@ -16,6 +17,8 @@ async function startServer() {
   const PORT = 3000;
 
   app.use(express.json({ limit: '50mb' }));
+
+  const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 20 * 1024 * 1024 } });
 
   const httpsAgent = new https.Agent({
     keepAlive: true,
@@ -350,6 +353,66 @@ async function startServer() {
     }
   });
 
+  // 文件上传版图片生成接口（解决小程序 base64 体积过大问题）
+  app.post("/api/generate-image-file", upload.single('image'), async (req, res) => {
+    const prompt = req.body?.prompt;
+    if (!prompt || typeof prompt !== 'string') {
+      return res.status(400).json({ error: "缺少必要参数: prompt", code: "INVALID_PARAMETER" });
+    }
+
+    try {
+      const url = `${ARK_BASE_URL}/services/aigc/multimodal-generation/generation`;
+      const messages: any[] = [{ role: "user", content: [] as any[] }];
+
+      if (req.file) {
+        const mime = req.file.mimetype || 'image/jpeg';
+        const b64 = req.file.buffer.toString('base64');
+        messages[0].content.push({ image: `data:${mime};base64,${b64}` });
+      }
+      messages[0].content.push({ text: prompt });
+
+      const requestBody = {
+        model: req.body.model || DASHSCOPE_CONFIG.IMAGE_MODEL,
+        input: { messages },
+        parameters: { n: 1, result_format: "message", watermark: false }
+      };
+
+      console.log("Submitting generate-image-file to DashScope:", {
+        model: requestBody.model,
+        hasFile: !!req.file,
+        fileSize: req.file?.size,
+        prompt: prompt.substring(0, 50) + "..."
+      });
+
+      const response = await axios.post(url, requestBody, {
+        headers: { 'Authorization': `Bearer ${ARK_API_KEY}`, 'Content-Type': 'application/json' },
+        httpsAgent,
+        timeout: 90000
+      });
+
+      const output = response.data?.output;
+      if (output?.choices?.[0]?.message?.content) {
+        const content = output.choices[0].message.content;
+        let imageUrl = "";
+        if (Array.isArray(content)) {
+          const imgItem = content.find((c: any) => c.image);
+          if (imgItem) imageUrl = imgItem.image;
+        }
+        if (imageUrl) {
+          return res.json({ id: `sync:${Date.now()}`, status: 'succeeded', image_url: imageUrl });
+        }
+      }
+      const taskId = output?.task_id;
+      if (taskId) {
+        return res.json({ id: taskId, status: 'pending' });
+      }
+      throw new Error("DashScope 未返回图片地址或任务 ID");
+    } catch (error: any) {
+      console.error("generate-image-file Error:", error.response?.data || error.message);
+      sendError(res, error, "生成图片失败");
+    }
+  });
+
   // DashScope task status polling (Unified for both image and video)
   app.get("/api/:type(image|video)-status/:taskId", async (req, res) => {
     const { taskId } = req.params;
@@ -397,28 +460,38 @@ async function startServer() {
 
   // API Route for Video Generation (DashScope)
   app.post("/api/generate-video", async (req, res) => {
-    const { prompt, image_base64 } = req.body;
+    let { prompt, image_base64 } = req.body;
     if (!image_base64) {
       return res.status(400).json({ error: "缺少必要参数: image_base64", code: "INVALID_PARAMETER" });
     }
 
     try {
+      // 如果传入的是 URL（非 base64），先抓取图片转成 base64 data URL
+      // DashScope 不跟随重定向，picsum 等 URL 会被拒绝
+      if (image_base64.startsWith('http://') || image_base64.startsWith('https://')) {
+        console.log("[Video] Image is URL, fetching and converting to base64...", image_base64.substring(0, 80));
+        const imgRes = await axios.get(image_base64, {
+          responseType: 'arraybuffer',
+          httpsAgent,
+          timeout: 30000,
+          maxRedirects: 5,
+        });
+        const mime = (imgRes.headers['content-type'] || 'image/jpeg').split(';')[0];
+        const b64 = Buffer.from(imgRes.data).toString('base64');
+        image_base64 = `${mime};base64,${b64}`;
+        console.log("[Video] Converted to base64, mime:", mime, "size:", b64.length);
+      }
+
       const url = `${ARK_BASE_URL}/services/aigc/video-generation/video-synthesis`;
-      
-      // DashScope Wan I2V usually requires an image URL or base64
-      // Some DashScope models require img_url
       const requestBody = {
         model: req.body.model || DASHSCOPE_CONFIG.VIDEO_MODEL,
         input: {
-          img_url: image_base64, // DashScope accepts data URLs usually
+          img_url: image_base64,
           prompt: prompt || "A high quality video of this cat, cinematic lighting, realistic."
         }
       };
 
-      console.log("Submitting Video task to DashScope:", {
-        model: requestBody.model,
-        url: url
-      });
+      console.log("Submitting Video task to DashScope:", { model: requestBody.model, url });
 
       const response = await axios.post(url, requestBody, {
         headers: {
