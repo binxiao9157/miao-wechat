@@ -507,20 +507,13 @@ async function startServer() {
     }
 
     try {
-      // 如果传入的是 URL（非 base64），先抓取图片转成 base64 data URL
-      // DashScope 不跟随重定向，picsum 等 URL 会被拒绝
-      if (image_base64.startsWith('http://') || image_base64.startsWith('https://')) {
-        console.log("[Video] Image is URL, fetching and converting to base64...", image_base64.substring(0, 80));
-        const imgRes = await axios.get(image_base64, {
-          responseType: 'arraybuffer',
-          httpsAgent,
-          timeout: 30000,
-          maxRedirects: 5,
-        });
-        const mime = (imgRes.headers['content-type'] || 'image/jpeg').split(';')[0];
-        const b64 = Buffer.from(imgRes.data).toString('base64');
-        image_base64 = `${mime};base64,${b64}`;
-        console.log("[Video] Converted to base64, mime:", mime, "size:", b64.length);
+      // DashScope 视频生成 API 的 img_url 直接支持 https URL，无需转 base64
+      // 只有非 URL 的 base64 数据才需要保留原样
+      if (!image_base64.startsWith('http://') && !image_base64.startsWith('https://')) {
+        // 本地 base64 数据，保持不变
+        console.log("[Video] Image is base64 data, sending directly to DashScope");
+      } else {
+        console.log("[Video] Image is URL, passing directly to DashScope:", image_base64.substring(0, 80));
       }
 
       const url = `${ARK_BASE_URL}/services/aigc/video-generation/video-synthesis`;
